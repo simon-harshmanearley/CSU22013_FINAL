@@ -21,14 +21,15 @@ library(jsonlite)
 library(furrr)
 library(shiny)
 library(shinyjs)
+library(plotly)
 
-# Call to MIT GitHub API to get information on current top trending repositories 
+# Call to MIT GitHub API to get information on current top trending repositories
 url <- "https://api.gitterapp.com/repositories?since=daily"
 response <- GET(url)
 repo_data <- content(response)
 
 # Set the value of top_number
-top_number <- 4
+top_number <- 5
 
 # Retrieve list of top N authors
 repo_author <- lapply(repo_data, "[[", 1)
@@ -39,12 +40,17 @@ repo_name <- lapply(repo_data, "[[", 2)
 repo_name <- repo_name[1:top_number]
 
 # Function which manually creates URL to commit activity of each repository
-create_commit_activity_url <- function(repo_author, repo_name){
-  paste0("https://api.github.com/repos/", repo_author, "/", repo_name, "/commits")
+create_commit_activity_url <- function(repo_author, repo_name) {
+  paste0("https://api.github.com/repos/",
+         repo_author,
+         "/",
+         repo_name,
+         "/commits")
 }
 
 # Create list of URLs to commit activity of top N repositories
-commit_activity_url <- mapply(create_commit_activity_url, repo_author, repo_name, SIMPLIFY = FALSE)
+commit_activity_url <-
+  mapply(create_commit_activity_url, repo_author, repo_name, SIMPLIFY = FALSE)
 commit_activity_url_list <- as.character(commit_activity_url)
 
 ```
@@ -64,32 +70,36 @@ headers <- c(Authorization = paste("Bearer", API_PAT))
 
 # Function to calculate the daily, monthly and yearly time periods
 calculate_time_periods <- function() {
-  
   # Calculate the time stamp for the current date
   now <- Sys.time()
   
-  # Calculate the time stamp for the last 24 hours, last month, and last year, in seconds
-  since_24hours <- now - 24 * 60 * 60
-  since_last_month <-
-    as.POSIXct(format(now - 30 * 24 * 60 * 60, "%Y-%m-%d"))
-  since_last_year <-
-    as.POSIXct(format(now - 365 * 24 * 60 * 60, "%Y-%m-%d"))
+  # Calculate the timestamp for the last 24 hours
+  since_24_hours <- now - 24 * 60 * 60
   
-  # Format the time stamps to match the ISO 8601 format (required by GitHub API)
-  now_iso <- format(now, "%Y-%m-%dT%H:%M:%SZ")
-  since_24hours_iso <- format(since_24hours, "%Y-%m-%dT%H:%M:%SZ")
+  # Calculate the timestamp for the last week
+  since_last_week <- now - 7 * 24 * 60 * 60
+  
+  # Calculate the timestamp for the last month (30 days)
+  since_last_month <- now - 30 * 24 * 60 * 60
+  
+  # Calculate the timestamp for the last 6 months (180 days)
+  since_last_6_months <- now - 180 * 24 * 60 * 60
+  
+  # Format the timestamps to match the ISO 8601 format (required by GitHub API)
+  since_24_hours_iso <- format(since_24_hours, "%Y-%m-%dT%H:%M:%SZ")
+  since_last_week_iso <- format(since_last_week, "%Y-%m-%dT%H:%M:%SZ")
   since_last_month_iso <-
     format(since_last_month, "%Y-%m-%dT%H:%M:%SZ")
-  since_last_year_iso <-
-    format(since_last_year, "%Y-%m-%dT%H:%M:%SZ")
-  
+  since_last_6_months_iso <-
+    format(since_last_6_months, "%Y-%m-%dT%H:%M:%SZ")
   # Return the calculated time periods
   return(
     list(
       now_iso = now_iso,
-      since_24hours_iso = since_24hours_iso,
+      since_24_hours_iso = since_24_hours_iso,
+      since_last_7_days_iso = since_last_7_days_iso,
       since_last_month_iso = since_last_month_iso,
-      since_last_year_iso = since_last_year_iso
+      since_last_6_months_iso = since_last_6_months_iso
     )
   )
 }
@@ -99,15 +109,17 @@ time_periods <- calculate_time_periods()
 
 # Access the calculated time periods
 now_iso <- time_periods$now_iso
-since_24hours_iso <- time_periods$since_24hours_iso
+since_24_hours_iso <- time_periods$since_24_hours_iso
+since_last_7_days_iso <- time_periods$since_last_7_days_iso
 since_last_month_iso <- time_periods$since_last_month_iso
-since_last_year_iso <- time_periods$since_last_year_iso
+since_last_6_months_iso <- time_periods$since_last_6_months_iso
 
 # Initialize lists to store total commit counts for each repository in each time category
 total_commits_list <- list()
-total_commits_since_24hours_list <- list()
+total_commits_since_24_hours_list <- list()
+total_commits_since_last_7_days_list <- list()
 total_commits_since_last_month_list <- list()
-total_commits_since_last_year_list <- list()
+total_commits_since_last_6_months_list <- list()
 
 # Function to fetch total commits for a URL
 fetch_total_commits <- function(commit_activity_url) {
@@ -156,7 +168,44 @@ fetch_total_commits_24hours <- function(commit_activity_url) {
     response <- GET(
       commits_url,
       add_headers(headers),
-      query = list(since = since_24hours_iso,
+      query = list(since = since_24_hours_iso,
+                   until = now_iso)
+    )
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Function to fetch total commits from last 7 days for a URL
+fetch_total_commits_last_7_days <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(
+      commits_url,
+      add_headers(headers),
+      query = list(since = since_last_7_days_iso,
                    until = now_iso)
     )
     commit_data <- content(response)
@@ -215,8 +264,8 @@ fetch_total_commits_last_month <- function(commit_activity_url) {
   return(total_commits)
 }
 
-# Function to fetch total commits from last year for a URL
-fetch_total_commits_last_year <- function(commit_activity_url) {
+# Function to fetch total commits from last 6 months for a URL
+fetch_total_commits_last_6_months <- function(commit_activity_url) {
   # Set page number to 1, and total commit count to 0
   page <- 1
   total_commits <- 0
@@ -230,7 +279,7 @@ fetch_total_commits_last_year <- function(commit_activity_url) {
     response <- GET(
       commits_url,
       add_headers(headers),
-      query = list(since = since_last_year_iso,
+      query = list(since = since_last_6_months_iso,
                    until = now_iso)
     )
     commit_data <- content(response)
@@ -251,19 +300,6 @@ fetch_total_commits_last_year <- function(commit_activity_url) {
   # Return value of total repository commits
   return(total_commits)
 }
-
-# Set up parallel processing
-plan(multisession, workers = availableCores())
-
-# Fetch total commits concurrently for each function
-total_commits_list <-
-  future_map_int(commit_activity_url_list, fetch_total_commits)
-total_commits_since_24hours_list <-
-  future_map_int(commit_activity_url_list, fetch_total_commits_24hours)
-total_commits_since_last_month_list <-
-  future_map_int(commit_activity_url_list, fetch_total_commits_last_month)
-total_commits_since_last_year_list <-
-  future_map_int(commit_activity_url_list, fetch_total_commits_last_year)
 ```
 
 The following chunk utilises Shiny, an open source package for R, to build the app which creates and displays the commit data.
@@ -280,60 +316,59 @@ ui <- fluidPage(
   selectInput(
     inputId = "time_period",
     label = "Select Time Period:",
-    choices = c("Total", "Last 24 Hours", "Last Month", "Last Year"),
+    choices = c("Total", "Last 24 Hours", "Last Week", "Last Month", "Last 6 Months"),
     selected = "Total"
   ),
   
-  # "Refresh" button
-  actionButton(inputId = "refresh_button", label = "Refresh"),
-  
   # Output: barplot
-  shinycssloaders::withSpinner(plotOutput(outputId = "bar_chart"))
+  shinycssloaders::withSpinner(plotlyOutput(outputId = "bar_plot"))
 )
 
 # Define server logic required to draw barplot
 server <- function(input, output) {
   # Render the bar chart
-  output$bar_chart <- renderPlot({
-    # Determine the size of y-axis and add padding
-    max_y <- max(total_commits_list) * 1.5
+  output$bar_plot <- renderPlotly({
+    # Set up parallel processing
+    plan(multisession, workers = availableCores())
     
     # Select the appropriate total_commits list based on user selection
     selected_list <- switch(
       input$time_period,
-      "Total" = total_commits_list,
-      "Last 24 Hours" = total_commits_since_24hours_list,
-      "Last Month" = total_commits_since_last_month_list,
-      "Last Year" = total_commits_since_last_year_list
+      "Total" = total_commits_list <-
+        future_map_int(commit_activity_url_list, fetch_total_commits),
+      "Last 24 Hours" = total_commits_since_24_hours_list <-
+        future_map_int(commit_activity_url_list, fetch_total_commits_24hours),
+      "Last Week" = total_commits_since_last_7_days_list <-
+        future_map_int(
+          commit_activity_url_list,
+          fetch_total_commits_last_7_days
+        ),
+      "Last Month" = total_commits_since_last_month_list <-
+        future_map_int(
+          commit_activity_url_list,
+          fetch_total_commits_last_month
+        ),
+      "Last 6 Months" = total_commits_since_last_6_months_list <-
+        future_map_int(
+          commit_activity_url_list,
+          fetch_total_commits_last_6_months
+        )
     )
     
     # Create the bar chart using barplot
-    barplot(
-      selected_list,
-      col = "#007bc2",
-      border = "black",
-      names.arg = repo_name,
-      xlab = "Repository Names in Descending Order from Most Trending to Least Trending",
-      ylab = "Total Commits",
-      main = "Total Commits for the Top 5 Trending Repositories on GitHub",
-      ylim = c(0, max_y)
-    )
+    plot_ly(
+      x = repo_name,
+      y = selected_list,
+      type = "bar",
+      marker = list(color = "#007bc2"),
+      hoverinfo = paste("Total Commits: ", selected_list)
+    ) %>%
+      layout(
+        xaxis = list(title = "Repository Names in Descending Order from Most Trending to Least Trending"),
+        yaxis = list(title = "Total Commits"),
+        title = "Commits for the Top Trending Repositories on GitHub"
+      )
     
-  })
-  
-  # Observe the "Refresh" button clicks
-  observeEvent(input$refresh_button, {
-    time_periods <- calculate_time_periods()
-    total_commits_list <-
-      future_map_int(commit_activity_url_list, fetch_total_commits)
-    total_commits_since_24hours_list <-
-      future_map_int(commit_activity_url_list, fetch_total_commits_24hours)
-    total_commits_since_last_month_list <-
-      future_map_int(commit_activity_url_list,
-                     fetch_total_commits_last_month)
-    total_commits_since_last_year_list <-
-      future_map_int(commit_activity_url_list, fetch_total_commits_last_year)
-    print("Data refreshed!")
   })
   
 }
