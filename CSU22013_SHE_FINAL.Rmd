@@ -1,0 +1,343 @@
+---
+title: 'CSU22013: Design and implement a dashboard to visualise and compare commit
+  activity for trending repositories on GitHub.'
+output:
+  html_document:
+    df_print: paged
+---
+
+The following chunk utilises the MIT GitHub API found at, https://github.com/alisoft/github-trending-api#readme (Full license citation to be added). 
+
+The purpose of using this API is to create a list of the top trending repositories on GitHub, to be used later in conjunction with the official GitHub API, which will allow access to the commit data of each individual repository.
+
+The following code firstly accesses the API, and then retrieves a list of the top trending authors and repository names, in order to manually create a list of URLs to the commit data, which the official GitHub API will then use.
+
+A URL to a repositories commit data is as follows:
+"https://api.github.com/repos/", repo_author, "/", repo_name, "/commits"
+
+```{r}
+library(httr)
+library(jsonlite)
+library(furrr)
+library(shiny)
+library(shinyjs)
+
+# Call to MIT GitHub API to get information on current top trending repositories 
+url <- "https://api.gitterapp.com/repositories?since=daily"
+response <- GET(url)
+repo_data <- content(response)
+
+# Set the value of top_number
+top_number <- 4
+
+# Retrieve list of top N authors
+repo_author <- lapply(repo_data, "[[", 1)
+repo_author <- repo_author[1:top_number]
+
+# Retrieve list of top N repository names
+repo_name <- lapply(repo_data, "[[", 2)
+repo_name <- repo_name[1:top_number]
+
+# Function which manually creates URL to commit activity of each repository
+create_commit_activity_url <- function(repo_author, repo_name){
+  paste0("https://api.github.com/repos/", repo_author, "/", repo_name, "/commits")
+}
+
+# Create list of URLs to commit activity of top N repositories
+commit_activity_url <- mapply(create_commit_activity_url, repo_author, repo_name, SIMPLIFY = FALSE)
+commit_activity_url_list <- as.character(commit_activity_url)
+
+```
+
+The following chunk concerns the official GitHub API, found at, https://docs.github.com/en/rest?apiVersion=2022-11-28.
+
+Unfortunately there is no header within the API for any kind of 'total commit count', however it is possible to search page-by-page through the commit history. The maximum commits which can be displayed per page is 100. In order to retrieve the total number of commits per repository, I created a function which loops through each page of the commit history, counting up to 100 commits at a time, until there are no more commits left to count. The function does this for the top 10 trending repositories, the list for which was created in the previous chunk. 
+
+Initially, I was calculating the total commits for the top 25 repositories, however this was taking approximately 3 minutes to complete, so I decided to only analyse the top 10 repositories.
+
+The process in my testing takes approximately 30 seconds, however depending on the total number of commits within the top 10 repositories, this could take a longer, or shorter length of time.
+
+```{r}
+# Personal Access Token for GitHub API
+API_PAT <- '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'
+headers <- c(Authorization = paste("Bearer", API_PAT))
+
+# Function to calculate the daily, monthly and yearly time periods
+calculate_time_periods <- function() {
+  
+  # Calculate the time stamp for the current date
+  now <- Sys.time()
+  
+  # Calculate the time stamp for the last 24 hours, last month, and last year, in seconds
+  since_24hours <- now - 24 * 60 * 60
+  since_last_month <-
+    as.POSIXct(format(now - 30 * 24 * 60 * 60, "%Y-%m-%d"))
+  since_last_year <-
+    as.POSIXct(format(now - 365 * 24 * 60 * 60, "%Y-%m-%d"))
+  
+  # Format the time stamps to match the ISO 8601 format (required by GitHub API)
+  now_iso <- format(now, "%Y-%m-%dT%H:%M:%SZ")
+  since_24hours_iso <- format(since_24hours, "%Y-%m-%dT%H:%M:%SZ")
+  since_last_month_iso <-
+    format(since_last_month, "%Y-%m-%dT%H:%M:%SZ")
+  since_last_year_iso <-
+    format(since_last_year, "%Y-%m-%dT%H:%M:%SZ")
+  
+  # Return the calculated time periods
+  return(
+    list(
+      now_iso = now_iso,
+      since_24hours_iso = since_24hours_iso,
+      since_last_month_iso = since_last_month_iso,
+      since_last_year_iso = since_last_year_iso
+    )
+  )
+}
+
+# Call the function to calculate time periods
+time_periods <- calculate_time_periods()
+
+# Access the calculated time periods
+now_iso <- time_periods$now_iso
+since_24hours_iso <- time_periods$since_24hours_iso
+since_last_month_iso <- time_periods$since_last_month_iso
+since_last_year_iso <- time_periods$since_last_year_iso
+
+# Initialize lists to store total commit counts for each repository in each time category
+total_commits_list <- list()
+total_commits_since_24hours_list <- list()
+total_commits_since_last_month_list <- list()
+total_commits_since_last_year_list <- list()
+
+# Function to fetch total commits for a URL
+fetch_total_commits <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(commits_url, add_headers(headers))
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Function to fetch total commits from last 24 hours for a URL
+fetch_total_commits_24hours <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(
+      commits_url,
+      add_headers(headers),
+      query = list(since = since_24hours_iso,
+                   until = now_iso)
+    )
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Function to fetch total commits from last month for a URL
+fetch_total_commits_last_month <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(
+      commits_url,
+      add_headers(headers),
+      query = list(since = since_last_month_iso,
+                   until = now_iso)
+    )
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Function to fetch total commits from last year for a URL
+fetch_total_commits_last_year <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(
+      commits_url,
+      add_headers(headers),
+      query = list(since = since_last_year_iso,
+                   until = now_iso)
+    )
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Set up parallel processing
+plan(multisession, workers = availableCores())
+
+# Fetch total commits concurrently for each function
+total_commits_list <-
+  future_map_int(commit_activity_url_list, fetch_total_commits)
+total_commits_since_24hours_list <-
+  future_map_int(commit_activity_url_list, fetch_total_commits_24hours)
+total_commits_since_last_month_list <-
+  future_map_int(commit_activity_url_list, fetch_total_commits_last_month)
+total_commits_since_last_year_list <-
+  future_map_int(commit_activity_url_list, fetch_total_commits_last_year)
+```
+
+The following chunk utilises Shiny, an open source package for R, to build the app which creates and displays the commit data.
+
+At the moment the code creates and displays a sample bar plot, comparing the total number of commits of the top 10 trending repositories. 
+
+```{r}
+# Define UI for app which draws barplot
+ui <- fluidPage(
+  # App title
+  titlePanel("Top 5 Trending GitHub Repositories"),
+  
+  # Drop-down input for time period selection
+  selectInput(
+    inputId = "time_period",
+    label = "Select Time Period:",
+    choices = c("Total", "Last 24 Hours", "Last Month", "Last Year"),
+    selected = "Total"
+  ),
+  
+  # "Refresh" button
+  actionButton(inputId = "refresh_button", label = "Refresh"),
+  
+  # Output: barplot
+  shinycssloaders::withSpinner(plotOutput(outputId = "bar_chart"))
+)
+
+# Define server logic required to draw barplot
+server <- function(input, output) {
+  # Render the bar chart
+  output$bar_chart <- renderPlot({
+    # Determine the size of y-axis and add padding
+    max_y <- max(total_commits_list) * 1.5
+    
+    # Select the appropriate total_commits list based on user selection
+    selected_list <- switch(
+      input$time_period,
+      "Total" = total_commits_list,
+      "Last 24 Hours" = total_commits_since_24hours_list,
+      "Last Month" = total_commits_since_last_month_list,
+      "Last Year" = total_commits_since_last_year_list
+    )
+    
+    # Create the bar chart using barplot
+    barplot(
+      selected_list,
+      col = "#007bc2",
+      border = "black",
+      names.arg = repo_name,
+      xlab = "Repository Names in Descending Order from Most Trending to Least Trending",
+      ylab = "Total Commits",
+      main = "Total Commits for the Top 5 Trending Repositories on GitHub",
+      ylim = c(0, max_y)
+    )
+    
+  })
+  
+  # Observe the "Refresh" button clicks
+  observeEvent(input$refresh_button, {
+    time_periods <- calculate_time_periods()
+    total_commits_list <-
+      future_map_int(commit_activity_url_list, fetch_total_commits)
+    total_commits_since_24hours_list <-
+      future_map_int(commit_activity_url_list, fetch_total_commits_24hours)
+    total_commits_since_last_month_list <-
+      future_map_int(commit_activity_url_list,
+                     fetch_total_commits_last_month)
+    total_commits_since_last_year_list <-
+      future_map_int(commit_activity_url_list, fetch_total_commits_last_year)
+    print("Data refreshed!")
+  })
+  
+}
+
+# Create Shiny app
+shinyApp(ui = ui, server = server)
+```
