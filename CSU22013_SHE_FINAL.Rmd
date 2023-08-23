@@ -85,6 +85,9 @@ calculate_time_periods <- function() {
   # Calculate the timestamp for the last 6 months (180 days)
   since_last_6_months <- now - 180 * 24 * 60 * 60
   
+    # Calculate the timestamp for the last year (365 days)
+  since_last_6_months <- now - 365 * 24 * 60 * 60
+  
   # Format the timestamps to match the ISO 8601 format (required by GitHub API)
   since_24_hours_iso <- format(since_24_hours, "%Y-%m-%dT%H:%M:%SZ")
   since_last_week_iso <- format(since_last_week, "%Y-%m-%dT%H:%M:%SZ")
@@ -92,6 +95,9 @@ calculate_time_periods <- function() {
     format(since_last_month, "%Y-%m-%dT%H:%M:%SZ")
   since_last_6_months_iso <-
     format(since_last_6_months, "%Y-%m-%dT%H:%M:%SZ")
+    since_last_year_iso <-
+    format(since_last_year, "%Y-%m-%dT%H:%M:%SZ")
+  
   # Return the calculated time periods
   return(
     list(
@@ -99,7 +105,8 @@ calculate_time_periods <- function() {
       since_24_hours_iso = since_24_hours_iso,
       since_last_7_days_iso = since_last_7_days_iso,
       since_last_month_iso = since_last_month_iso,
-      since_last_6_months_iso = since_last_6_months_iso
+      since_last_6_months_iso = since_last_6_months_iso,
+      since_last_year_iso = since_last_year_iso
     )
   )
 }
@@ -113,6 +120,7 @@ since_24_hours_iso <- time_periods$since_24_hours_iso
 since_last_7_days_iso <- time_periods$since_last_7_days_iso
 since_last_month_iso <- time_periods$since_last_month_iso
 since_last_6_months_iso <- time_periods$since_last_6_months_iso
+since_last_year_iso <- time_periods$since_last_year_iso
 
 # Initialize lists to store total commit counts for each repository in each time category
 total_commits_list <- list()
@@ -120,6 +128,9 @@ total_commits_since_24_hours_list <- list()
 total_commits_since_last_7_days_list <- list()
 total_commits_since_last_month_list <- list()
 total_commits_since_last_6_months_list <- list()
+total_commits_since_last_year_list <- list()
+total_night_commits_list <- list()
+total_day_commits_list <- list()
 
 # Function to fetch total commits for a URL
 fetch_total_commits <- function(commit_activity_url) {
@@ -300,11 +311,126 @@ fetch_total_commits_last_6_months <- function(commit_activity_url) {
   # Return value of total repository commits
   return(total_commits)
 }
+
+# Function to fetch total commits from last year for a URL
+fetch_total_commits_last_year <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
+  while (TRUE) {
+    commits_url <-
+      paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(
+      commits_url,
+      add_headers(headers),
+      query = list(since = since_last_year_iso,
+                   until = now_iso)
+    )
+    commit_data <- content(response)
+    
+    # Calculate number of commits on page
+    commits_on_page <- length(commit_data)
+    
+    # If there are no commits in repository, exit loop and return total commits as 0
+    if (commits_on_page == 0) {
+      break
+    }
+    
+    # Add total commits from page to total commit count, and go to next page
+    total_commits <- total_commits + commits_on_page
+    page <- page + 1
+  }
+  
+  # Return value of total repository commits
+  return(total_commits)
+}
+
+# Function to fetch total commits for a URL after 8am but before 6pm
+fetch_total_day_commits <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_day_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
+  while (TRUE) {
+    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(commits_url, add_headers(headers))
+    commit_data <- content(response)
+    
+    # Categorize commits based on time of day, count if during specified daytime hours
+    for (commit in commit_data) {
+      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
+      hour <- as.numeric(format(commit_time, "%H"))
+      
+      if (hour >= 8 && hour < 18) {
+        total_day_commits <- total_day_commits + 1
+      } else {
+      }
+    }
+    
+    # If there are no commits in repository, exit loop
+    if (length(commit_data) == 0) {
+      break
+    }
+    
+    page <- page + 1
+  }
+  
+  # Return value of total day commits
+  return(total_day_commits)
+}
+
+# Function to fetch total commits for a URL after 6pm but before 8am
+fetch_total_night_commits <- function(commit_activity_url) {
+  # Set page number to 1, and total commit count to 0
+  page <- 1
+  total_night_commits <- 0
+  
+  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
+  while (TRUE) {
+    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
+    
+    # Access the commit data from specified page of URL using official GitHub API
+    response <- GET(commits_url, add_headers(headers))
+    commit_data <- content(response)
+    
+    # Categorize commits based on time of day, count if during specified nighttime hours
+    for (commit in commit_data) {
+      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
+      hour <- as.numeric(format(commit_time, "%H"))
+      
+      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
+        total_night_commits <- total_night_commits + 1
+      } else {
+      }
+    }
+    
+    # If there are no commits in repository, exit loop
+    if (length(commit_data) == 0) {
+      break
+    }
+    
+    page <- page + 1
+  }
+  
+  # Return value of total day commits
+  return(total_night_commits)
+}
 ```
 
 The following chunk utilises Shiny, an open source package for R, to build the app which creates and displays the commit data.
 
 At the moment the code creates and displays a sample bar plot, comparing the total number of commits of the top 10 trending repositories. 
+
+total_day_commits_list <- future_map_int(commit_activity_url_list, fetch_total_day_commits)
+
+total_night_commits_list <- future_map_int(commit_activity_url_list, fetch_total_night_commits)
 
 ```{r}
 # Define UI for app which draws barplot
@@ -316,7 +442,7 @@ ui <- fluidPage(
   selectInput(
     inputId = "time_period",
     label = "Select Time Period:",
-    choices = c("Total", "Last 24 Hours", "Last Week", "Last Month", "Last 6 Months"),
+    choices = c("Total", "Last 24 Hours", "Last Week", "Last Month", "Last 6 Months", "Last Year"),
     selected = "Total"
   ),
   
@@ -352,6 +478,11 @@ server <- function(input, output) {
         future_map_int(
           commit_activity_url_list,
           fetch_total_commits_last_6_months
+        ), 
+      "Last Year" = total_commits_since_last_year_list <-
+        future_map_int(
+          commit_activity_url_list,
+          fetch_total_commits_last_year
         )
     )
     
@@ -361,7 +492,7 @@ server <- function(input, output) {
       y = selected_list,
       type = "bar",
       marker = list(color = "#007bc2"),
-      hoverinfo = paste("Total Commits: ", selected_list)
+      hoverinfo = paste(selected_list)
     ) %>%
       layout(
         xaxis = list(title = "Repository Names in Descending Order from Most Trending to Least Trending"),
