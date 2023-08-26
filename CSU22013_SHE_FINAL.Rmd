@@ -22,37 +22,168 @@ library(furrr)
 library(shiny)
 library(shinyjs)
 library(plotly)
+library(dplyr)
+library(tidyr)
+library(scales)
+```
 
-# Call to MIT GitHub API to get information on current top trending repositories
-url <- "https://api.gitterapp.com/repositories?since=daily"
-response <- GET(url)
-repo_data <- content(response)
+Function to Create base URL, to which /commits or /languages can be appended 
 
-# Set the value of top_number
-top_number <- 5
-
-# Retrieve list of top N authors
-repo_author <- lapply(repo_data, "[[", 1)
-repo_author <- repo_author[1:top_number]
-
-# Retrieve list of top N repository names
-repo_name <- lapply(repo_data, "[[", 2)
-repo_name <- repo_name[1:top_number]
+```{r}
+API_1_create_urls <- function(date_range){
+  
+  # Call to MIT GitHub API to get information on current top trending repositories
+  url <- "https://api.gitterapp.com/repositories?since=daily"
+  response <- GET(url, query = list(since = date_range))
+  repo_data <- content(response)
+  
+  # Retrieve list of top N authors
+  repo_author <- lapply(repo_data, "[[", 1)
+ 
+  # Retrieve list of top N repository names
+  repo_name <- lapply(repo_data, "[[", 2)
 
 # Function which manually creates URL to commit activity of each repository
-create_commit_activity_url <- function(repo_author, repo_name) {
-  paste0("https://api.github.com/repos/",
-         repo_author,
-         "/",
-         repo_name,
-         "/commits")
+  create_url <- function(repo_author, repo_name) {
+  url <- paste0("https://api.github.com/repos/", repo_author, "/", repo_name)
+  return(url)
+  }
+
+  # Create list of URLs to commit activity of top N repositories
+  url <- mapply(create_url, repo_author, repo_name, SIMPLIFY = FALSE)
+  url_list <- as.character(url)
+  
+  return(url_list)
 }
 
-# Create list of URLs to commit activity of top N repositories
-commit_activity_url <-
-  mapply(create_commit_activity_url, repo_author, repo_name, SIMPLIFY = FALSE)
-commit_activity_url_list <- as.character(commit_activity_url)
+data <- API_1_create_urls('daily')
+data
+```
 
+Function which creates data frame of each repository, their languages and percentage of each language within the project
+
+```{r}
+# Personal Access Token for GitHub API
+API_PAT <- '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'
+headers <- c(Authorization = paste("Bearer", API_PAT))
+
+# Function to fetch language percentages per repository
+create_language_table <- function(date_range, number_of_urls) {
+  language_url_list <- API_1_create_urls(date_range)
+  
+  # Initialise list
+  language_data_list <- list()
+  
+  # Loop through each URL
+  for (url in language_url_list[1:number_of_urls]) {
+    repo_name <-
+      strsplit(url, "/")[[1]][6]  # Get repository name from URL
+    url <- paste0(url, "/languages")
+    
+    response <- GET(url, add_headers(headers))
+    language_data <- content(response)
+    
+    # Convert language_data into a data frame
+    language_df <- data.frame(
+      repository = repo_name,
+      language = names(language_data),
+      percentage = unlist(language_data)
+    )
+    
+    language_data_list[[repo_name]] <- language_df
+  }
+  
+  # Combine all language dataframes into a single dataframe
+  language_table <- bind_rows(language_data_list)
+  
+  # Pivot the data into wide format
+  language_table <- language_table %>%
+    pivot_wider(
+      names_from = language,
+      values_from = percentage,
+      values_fill = 0
+    )
+  
+  #tibble -> df
+  language_table = as.data.frame(language_table)
+  #colnames
+  rownames(language_table) = language_table$repository
+  language_table$repository <- NULL
+  
+  # Calculate the row sums
+  row_sums <- rowSums(languageDataFrame)
+
+  # Calculate the percentage of each column by row to 2 decimal places
+  round(languageDataFrame / row_sums, 2)
+  
+  return(language_table)
+}
+
+languageDataFrame <- create_language_table('daily', 10)
+
+```
+
+```{r}
+rownames(language_data) = language_data$repository
+```
+
+
+Function which creates a data frame of every commit in the master branch of a repo. Each commit in data frame includes: Repository name, developer name, developer contact email, datetime commit published at
+
+```{r}
+# Personal Access Token for GitHub API
+API_PAT <- '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'
+headers <- c(Authorization = paste("Bearer", API_PAT))
+
+#date_range = 'daily'
+#number_of_urls = 1
+
+url = commit_activity_url_list[[1]]
+
+
+create_commits_table <- function(date_range, number_of_urls) {
+  commit_activity_url_list <- API_1_create_urls(date_range)
+  
+  # Initialize an empty data frame to store the commit information
+  cols = c('repo','dev_name','email','datetime')
+  data_table = data.frame(matrix(nrow = 0, ncol = length(cols))) 
+  colnames(data_table) = cols
+  
+  # Loop through each commit activity URL
+  for (url in commit_activity_url_list[1:number_of_urls]) {
+    
+    url <- paste0(url, "/commits")
+    
+    page <- 1
+
+    while (TRUE) {
+      page_url <- paste0(url, "?per_page=100&page=", page)
+      response <- GET(page_url, add_headers(headers))
+      commit_data <- content(response)
+      
+      if (length(commit_data) == 0) {
+        break  # No more commits on this page
+      }
+      
+      df <- data.frame(
+        repo = c(strsplit(unlist(lapply(commit_data, function (x) x$commit$tree$url)), "/")[[1]][6]),
+        dev_name = c(unlist(lapply(commit_data, function (x) x$commit$author$name))),
+        email = c(unlist(lapply(commit_data, function (x) x$commit$author$email))),
+        datetime = c(unlist(lapply(commit_data, function (x) x$commit$author$date)))
+      )
+      
+      data_table <- rbind(data_table, df) 
+      page <- page + 1
+    }
+  
+  }
+  
+  return(data_table)
+}
+
+# Call the function with desired parameters
+commitDataFrame <- create_commits_table('daily', 3)
+commitDataFrame
 ```
 
 The following chunk concerns the official GitHub API, found at, https://docs.github.com/en/rest?apiVersion=2022-11-28.
@@ -63,94 +194,9 @@ Initially, I was calculating the total commits for the top 25 repositories, howe
 
 The process in my testing takes approximately 30 seconds, however depending on the total number of commits within the top 10 repositories, this could take a longer, or shorter length of time.
 
+
+
 ```{r}
-# Personal Access Token for GitHub API
-API_PAT <- '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'
-headers <- c(Authorization = paste("Bearer", API_PAT))
-
-# Function to calculate the daily, monthly and yearly time periods
-calculate_time_periods <- function() {
-  # Calculate the time stamp for the current date
-  now <- Sys.time()
-  
-  # Calculate the timestamp for the last 24 hours
-  since_24_hours <- now - 24 * 60 * 60
-  
-  # Calculate the timestamp for the last week
-  since_last_week <- now - 7 * 24 * 60 * 60
-  
-  # Calculate the timestamp for the last month (30 days)
-  since_last_month <- now - 30 * 24 * 60 * 60
-  
-  # Calculate the timestamp for the last 6 months (180 days)
-  since_last_6_months <- now - 180 * 24 * 60 * 60
-  
-    # Calculate the timestamp for the last year (365 days)
-  since_last_6_months <- now - 365 * 24 * 60 * 60
-  
-  # Format the timestamps to match the ISO 8601 format (required by GitHub API)
-  since_24_hours_iso <- format(since_24_hours, "%Y-%m-%dT%H:%M:%SZ")
-  since_last_week_iso <- format(since_last_week, "%Y-%m-%dT%H:%M:%SZ")
-  since_last_month_iso <-
-    format(since_last_month, "%Y-%m-%dT%H:%M:%SZ")
-  since_last_6_months_iso <-
-    format(since_last_6_months, "%Y-%m-%dT%H:%M:%SZ")
-    since_last_year_iso <-
-    format(since_last_year, "%Y-%m-%dT%H:%M:%SZ")
-  
-  # Return the calculated time periods
-  return(
-    list(
-      now_iso = now_iso,
-      since_24_hours_iso = since_24_hours_iso,
-      since_last_7_days_iso = since_last_7_days_iso,
-      since_last_month_iso = since_last_month_iso,
-      since_last_6_months_iso = since_last_6_months_iso,
-      since_last_year_iso = since_last_year_iso
-    )
-  )
-}
-
-# Call the function to calculate time periods
-time_periods <- calculate_time_periods()
-
-# Access the calculated time periods
-now_iso <- time_periods$now_iso
-since_24_hours_iso <- time_periods$since_24_hours_iso
-since_last_7_days_iso <- time_periods$since_last_7_days_iso
-since_last_month_iso <- time_periods$since_last_month_iso
-since_last_6_months_iso <- time_periods$since_last_6_months_iso
-since_last_year_iso <- time_periods$since_last_year_iso
-
-# Initialize lists to store total commit counts for each repository in each time category
-total_commits_list <- list()
-total_night_commits_list <- list()
-total_day_commits_list <- list()
-
-total_commits_since_24_hours_list <- list()
-total_day_commits_24hours_list <- list()
-total_night_commits_24hours_list <- list()
-
-total_commits_since_last_7_days_list <- list()
-total_day_commits_last_7_days_list <- list()
-total_night_commits_last_7_days_list <- list()
-
-total_commits_since_last_month_list <- list()
-total_day_commits_since_last_month_list <- list()
-total__night_commits_since_last_month_list <- list()
-
-total_commits_since_last_6_months_list <- list()
-total_day_commits_since_last_6_months_list <- list()
-total_night_commits_since_last_6_months_list <- list()
-
-total_commits_since_last_year_list <- list()
-total_day_commits_since_last_year_list <- list()
-total_night_commits_since_last_year_list <- list()
-
-
-
-# TOTAL commit functions
-# Function to fetch total commits for all time
 fetch_total_commits <- function(commit_activity_url) {
   # Set page number to 1, and total commit count to 0
   page <- 1
@@ -158,10 +204,7 @@ fetch_total_commits <- function(commit_activity_url) {
   
   # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
   while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
+    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
     response <- GET(commits_url, add_headers(headers))
     commit_data <- content(response)
     
@@ -180,659 +223,6 @@ fetch_total_commits <- function(commit_activity_url) {
   
   # Return value of total repository commits
   return(total_commits)
-}
-
-# Function to fetch total commits for all time after 8am but before 6pm
-fetch_total_day_commits <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits for all time after 6pm but before 8am
-fetch_total_night_commits <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
-}
-
-
-# 24 HOUR commit functions
-# Function to fetch total commits from last 24 hours 
-fetch_total_commits_24hours <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(
-      commits_url,
-      add_headers(headers),
-      query = list(since = since_24_hours_iso,
-                   until = now_iso)
-    )
-    commit_data <- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page <- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
-    }
-    
-    # Add total commits from page to total commit count, and go to next page
-    total_commits <- total_commits + commits_on_page
-    page <- page + 1
-  }
-  
-  # Return value of total repository commits
-  return(total_commits)
-}
-
-# Function to fetch total commits from last 24 hours after 8am but before 6pm
-fetch_total_day_commits_24hours <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers),       query = list(since = since_24_hours_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits from last 24 hours after 6pm but before 8am
-fetch_total_night_commits_24hours <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers), query = list(since = since_24_hours_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
-}
-
-
-# LAST 7 DAYS commit functions
-# Function to fetch total commits from last 7 days
-fetch_total_commits_last_7_days <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(
-      commits_url,
-      add_headers(headers),
-      query = list(since = since_last_7_days_iso,
-                   until = now_iso)
-    )
-    commit_data <- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page <- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
-    }
-    
-    # Add total commits from page to total commit count, and go to next page
-    total_commits <- total_commits + commits_on_page
-    page <- page + 1
-  }
-  
-  # Return value of total repository commits
-  return(total_commits)
-}
-
-# Function to fetch total commits from last 7 days after 8am but before 6pm
-fetch_total_day_commits_last_7_days <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers),
-      query = list(since = since_last_7_days_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits from last 7 days after 6pm but before 8am
-fetch_total_night_commits_last_7_days <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers), query = list(since = since_last_7_days_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
-}
-
-
-# LAST MONTH commit functions
-# Function to fetch total commits from last month 
-fetch_total_commits_last_month <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(
-      commits_url,
-      add_headers(headers),
-      query = list(since = since_last_month_iso,
-                   until = now_iso)
-    )
-    commit_data <- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page <- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
-    }
-    
-    # Add total commits from page to total commit count, and go to next page
-    total_commits <- total_commits + commits_on_page
-    page <- page + 1
-  }
-  
-  # Return value of total repository commits
-  return(total_commits)
-}
-
-# Function to fetch total commits from last month after 8am but before 6pm
-fetch_total_day_commits_last_month <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers),
-      query = list(since = since_last_month_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits from last month after 6pm but before 8am
-fetch_total_night_commits_last_month <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers), query = list(since = since_last_month_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
-}
-
-
-# LAST 6 MONTHS commit functions
-# Function to fetch total commits from last 6 months 
-fetch_total_commits_last_6_months <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(
-      commits_url,
-      add_headers(headers),
-      query = list(since = since_last_6_months_iso,
-                   until = now_iso)
-    )
-    commit_data <- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page <- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
-    }
-    
-    # Add total commits from page to total commit count, and go to next page
-    total_commits <- total_commits + commits_on_page
-    page <- page + 1
-  }
-  
-  # Return value of total repository commits
-  return(total_commits)
-}
-
-# Function to fetch total commits from last 6 months after 8am but before 6pm
-fetch_total_day_commits_last_6_months <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers),
-      query = list(since = since_last_6_months_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits from last 6 months after 6pm but before 8am
-fetch_total_night_commits_last_6_months <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers), query = list(since = since_last_6_months_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
-}
-
-
-# LAST YEAR commit functions
-# Function to fetch total commits from last year 
-fetch_total_commits_last_year <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url <-
-      paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(
-      commits_url,
-      add_headers(headers),
-      query = list(since = since_last_year_iso,
-                   until = now_iso)
-    )
-    commit_data <- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page <- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
-    }
-    
-    # Add total commits from page to total commit count, and go to next page
-    total_commits <- total_commits + commits_on_page
-    page <- page + 1
-  }
-  
-  # Return value of total repository commits
-  return(total_commits)
-}
-
-# Function to fetch total commits from last year after 8am but before 6pm
-fetch_total_day_commits_last_year <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_day_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers),
-      query = list(since = since_last_year_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified daytime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if (hour >= 8 && hour < 18) {
-        total_day_commits <- total_day_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_day_commits)
-}
-
-# Function to fetch total commits from last year after 6pm but before 8am
-fetch_total_night_commits_last_year <- function(commit_activity_url) {
-  # Set page number to 1, and total commit count to 0
-  page <- 1
-  total_night_commits <- 0
-  
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits
-  while (TRUE) {
-    commits_url <- paste0(commit_activity_url, "?per_page=100&page=", page)
-    
-    # Access the commit data from specified page of URL using official GitHub API
-    response <- GET(commits_url, add_headers(headers), query = list(since = since_last_year_iso,
-                   until = now_iso))
-    commit_data <- content(response)
-    
-    # Categorize commits based on time of day, count if during specified nighttime hours
-    for (commit in commit_data) {
-      commit_time <- as.POSIXct(commit$commit$author$date, format = "%Y-%m-%dT%H:%M:%SZ")
-      hour <- as.numeric(format(commit_time, "%H"))
-      
-      if ((hour >= 0 && hour < 8) || (hour >= 18 && hour < 24)) {
-        total_night_commits <- total_night_commits + 1
-      } else {
-      }
-    }
-    
-    # If there are no commits in repository, exit loop
-    if (length(commit_data) == 0) {
-      break
-    }
-    
-    page <- page + 1
-  }
-  
-  # Return value of total day commits
-  return(total_night_commits)
 }
 ```
 
