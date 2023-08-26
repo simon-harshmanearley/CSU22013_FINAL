@@ -27,7 +27,7 @@ library(tidyr)
 library(scales)
 ```
 
-Function to Create base URL, to which /commits or /languages can be appended 
+Function to Create base URL, to which /commits or /languages can be appended. Daterange fetches either top repositories from last day, week, or month.
 
 ```{r}
 API_1_create_urls <- function(date_range){
@@ -68,7 +68,7 @@ API_PAT <- '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'
 headers <- c(Authorization = paste("Bearer", API_PAT))
 
 # Function to fetch language percentages per repository
-create_language_table <- function(date_range, number_of_urls) {
+create_language_dataframe <- function(date_range, number_of_urls) {
   language_url_list <- API_1_create_urls(date_range)
   
   # Initialise list
@@ -119,9 +119,37 @@ create_language_table <- function(date_range, number_of_urls) {
   return(language_table)
 }
 
-languageDataFrame <- create_language_table('daily', 10)
+languageDataFrame <- create_language_dataframe('daily', 10)
 
 ```
+
+
+Function which filters languageDataFrame by programming language, returning the top 5 (or less if there are less than 5) repositories which contain the user specified language (e.g. Python)
+
+```{r}
+create_top_5_language_dataframe <- function(language_choice) {
+  
+  # Get the index of the chosen language in the data frame
+  language_index <- which(colnames(languageDataFrame) == language_choice)
+  
+  # Filter repositories with non-zero percentage of chosen language
+  filtered_repositories <- languageDataFrame[languageDataFrame[, language_index] > 0, ]
+  
+  # Select repositories, considering the case of less than 5 repositories
+  num_repositories <- min(nrow(filtered_repositories), 5)
+  top_repositories <- filtered_repositories[1:num_repositories, ]
+  
+  return(top_repositories)
+}
+
+# User's language choice
+user_language_choice <- "Python"
+
+# Call the function with the user's language choice
+top_repositories_for_language <- create_top_5_language_dataframe(user_language_choice)
+top_repositories_for_language
+```
+
 
 ```{r}
 rownames(language_data) = language_data$repository
