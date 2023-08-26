@@ -231,16 +231,32 @@ count_commits_by_DevRepo <- function(commits_df){
 
 
 ```{r}
-# Graph 1
+# Graph 1: Languages
 
+graph_languages <- function(languages_df){
+  
+  # Find columns where all values are 0
+cols_to_remove <- colnames(language_df)[apply(language_df, 2, function(col) all(col == 0))]
 
+# Remove the identified columns
+language_df_filtered <- language_df[, !(colnames(language_df) %in% cols_to_remove)]
+  
+  language_matrix <- t(as.matrix(language_df_filtered))
+
+# Plot the stacked bar chart
+barplot(language_matrix, beside = FALSE,  names.arg = language_df$Repo,
+        main = "Languages by Repository", xlab = "Repository", ylab = "Percentage",
+        legend.text = names(colors), args.legend = list(x = "topright", bty = "n"))
+}
 ```
+
 
 
 ```{r}
 date_range = 'daily'
 language = 'Python'
 ```
+
 
 ```{r}
 main <- function(date_range,language){
