@@ -28,15 +28,9 @@ library(tidyr)
 library(scales)
 library(ggplot2)
 
-# Globals
-dateRange = "daily"
-targetLanguage = "Python"
-numUrlCommitDataFrame = 3
-
 # Personal Access Token for GitHub API
-API_PAT <- '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'
-headers <- c(Authorization = paste("Bearer", API_PAT))
-
+API_PAT <<- c(Authorization = paste("Bearer", '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'))
+PAGE_LIMITS <<- 5
 ```
 
 Function to Create base URL, to which /commits or /languages can be appended. Daterange fetches either top repositories from last day, week, or month.
@@ -67,9 +61,6 @@ API_1_create_urls <- function(date_range){
   
   return(url_list)
 }
-
-data <- API_1_create_urls(dateRange)
-data
 ```
 
 
@@ -78,20 +69,25 @@ Function which creates data frame of each repository, their languages and percen
 ```{r}
 # languageDataFrame
 # Function to fetch language percentages per repository
-create_language_dataframe <- function(date_range, number_of_urls) {
-  language_url_list <- API_1_create_urls(date_range)
-  
+create_language_dataframe <- function() {
+
   # Initialise list
   language_data_list <- list()
   
   # Loop through each URL
-  for (url in language_url_list[1:number_of_urls]) {
+  for (url in GIT_URLS) {
+
     repo_name <-
       strsplit(url, "/")[[1]][6]  # Get repository name from URL
     url <- paste0(url, "/languages")
     
-    response <- GET(url, add_headers(headers))
+    response <- GET(url, add_headers(API_PAT))
     language_data <- content(response)
+
+    if(length(language_data) == 0){
+      GIT_URLS = GIT_URLS[-which(GIT_URLS == url)]
+      next
+    }
     
     # Convert language_data into a data frame
     language_df <- data.frame(
@@ -121,15 +117,13 @@ create_language_dataframe <- function(date_range, number_of_urls) {
   language_table$repository <- NULL
   
   # Calculate the row sums
-  row_sums <- rowSums(languageDataFrame)
+  row_sums <- rowSums(language_table)
 
   # Calculate the percentage of each column by row to 2 decimal places
-  round(languageDataFrame / row_sums, 2)
+  language_table <- round(language_table / row_sums, 2)
   
   return(language_table)
 }
-
-languageDataFrame <- create_language_dataframe(dateRange, 18)
 ```
 
 
@@ -138,29 +132,28 @@ Function which filters languageDataFrame by programming language, returning the 
 ```{r}
 # filteredLanguageDataFrame
 # Function to create data frame to display the top 5 trending repositories, filtering by programming language. "total" returns top 5 generally
-create_filtered_top_5_language_dataframe <- function(language_choice) {
+create_filtered_top_n_language_dataframe <- function(language, language_df, n = 5) {
   
-    if (language_choice == "total") {
-    # Select the top 5 repositories based on trendiness
-    top_repositories <- head(languageDataFrame, 5)
-  } else {
+  if (language == "total") {
+      # Select the top 5 repositories based on trendiness
+      return(head(language_df, n))
+  } 
   
   # Get the index of the chosen language in the data frame
-  language_index <- which(colnames(languageDataFrame) == language_choice)
-  
+  language_index <- which(colnames(language_df) == language)
+    
   # Filter repositories with non-zero percentage of chosen language
-  filtered_repositories <- languageDataFrame[languageDataFrame[, language_index] > 0, ]
-  
+  filtered_repositories <- language_df[language_df[, language_index] > 0, ]
+    
   # Select repositories, considering the case of less than 5 repositories
-  num_repositories <- min(nrow(filtered_repositories), 5)
+  num_repositories <- min(nrow(filtered_repositories), n)
   top_repositories <- filtered_repositories[1:num_repositories, ]
-  }
-  
+
   return(top_repositories)
 }
 
-filteredLanguageDataFrame <- create_filtered_top_5_language_dataframe(targetLanguage)
-filteredLanguageDataFrame
+#filteredLanguageDataFrame <- create_filtered_top_5_language_dataframe(targetLanguage)
+
 ```
 
 Function which creates a data frame of every commit in the master branch of a repo. Each commit in data frame includes: Repository name, developer name, developer contact email, datetime commit published at
@@ -168,8 +161,7 @@ Function which creates a data frame of every commit in the master branch of a re
 ```{r}
 # commitDataFrame
 # Function which gets the entire commit history of x number of repositories from top trending
-create_commits_dataframe <- function(date_range, number_of_urls) {
-  commit_activity_url_list <- API_1_create_urls(date_range)
+create_commits_dataframe <- function() {
   
   # Initialize an empty data frame to store the commit information
   cols = c('repo','dev_name','email','datetime')
@@ -177,15 +169,15 @@ create_commits_dataframe <- function(date_range, number_of_urls) {
   colnames(data_table) = cols
   
   # Loop through each commit activity URL
-  for (url in commit_activity_url_list[1:number_of_urls]) {
+  for (url in GIT_URLS) {
     
     url <- paste0(url, "/commits")
     
     page <- 1
 
-    while (TRUE) {
+    while (page <= PAGE_LIMITS) {
       page_url <- paste0(url, "?per_page=100&page=", page)
-      response <- GET(page_url, add_headers(headers))
+      response <- GET(page_url, add_headers(API_PAT))
       commit_data <- content(response)
       
       if (length(commit_data) == 0) {
@@ -199,6 +191,7 @@ create_commits_dataframe <- function(date_range, number_of_urls) {
         datetime = c(unlist(lapply(commit_data, function (x) x$commit$author$date)))
       )
       
+
       data_table <- rbind(data_table, df) 
       page <- page + 1
     }
@@ -208,155 +201,72 @@ create_commits_dataframe <- function(date_range, number_of_urls) {
   return(data_table)
 }
 
-# Call the function with desired parameters
-commitDataFrame <- create_commits_dataframe(dateRange, numUrlCommitDataFrame)
-commitDataFrame
 ```
 
 ```{r}
-# filteredTopDevDataFrame
-# Function to create filteredTopDevDataFrame
-create_filtered_top_5_dev_dataframe <- function(languageDataFrame, commitDataFrame, Lx) {
-  if (Lx == "total") {
-    filtered_commits <- commitDataFrame
-  } else {
-    repos_with_language <- rownames(languageDataFrame[languageDataFrame[, Lx] > 0, ])
-    filtered_commits <- commitDataFrame[commitDataFrame$repo %in% repos_with_language, ]
-  }
-  
-  developer_commits <- aggregate(repo ~ dev_name + email, data = filtered_commits, FUN = length)
-  colnames(developer_commits) <- c("dev_name", "email", "num_commits")
-  
-  top_developers <- developer_commits[order(developer_commits$num_commits, decreasing = TRUE), ][1:5, ]
-  
-  return(top_developers)
+get_urls_from_list_of_repo_names  = function(language_df){
+    filtered_urls <- list()
+    for(url in GIT_URLS){
+      name <- strsplit(url, "/")[[1]][6]
+      if(name %in% rownames(language_df)){
+        filtered_urls[name] <- url
+      }
+    }  
+    
+  return(filtered_urls)
 }
 
-filteredTopDevDataFrame <- create_filtered_top_dev_dataframe(languageDataFrame, commitDataFrame, targetLanguage)
+```
+
+```{r}
+
+count_commits_by_DevRepo <- function(commits_df){
+  return(aggregate(email ~ dev_name + repo, data = commits_df, FUN = length))
+}
+
+
 ```
 
 
 
 
-The following chunk concerns the official GitHub API, found at, https://docs.github.com/en/rest?apiVersion=2022-11-28.
-
-Unfortunately there is no header within the API for any kind of 'total commit count', however it is possible to search page-by-page through the commit history. The maximum commits which can be displayed per page is 100. In order to retrieve the total number of commits per repository, I created a function which loops through each page of the commit history, counting up to 100 commits at a time, until there are no more commits left to count. The function does this for the top 10 trending repositories, the list for which was created in the previous chunk. 
-
-Initially, I was calculating the total commits for the top 25 repositories, however this was taking approximately 3 minutes to complete, so I decided to only analyse the top 10 repositories.
-
-The process in my testing takes approximately 30 seconds, however depending on the total number of commits within the top 10 repositories, this could take a longer, or shorter length of time.
-
-
-
-The following chunk utilises Shiny, an open source package for R, to build the app which creates and displays the commit data.
-
-At the moment the code creates and displays a sample bar plot, comparing the total number of commits of the top 10 trending repositories. 
-
-total_day_commits_list <- future_map_int(commit_activity_url_list, fetch_total_day_commits)
-
-total_night_commits_list <- future_map_int(commit_activity_url_list, fetch_total_night_commits)
-
 ```{r}
-# Define UI for app which draws barplot
-ui <- fluidPage(
-  # App title
-  titlePanel("Top 5 Trending GitHub Repositories"),
-  
-  # Drop-down input for time period selection
-  selectInput(
-    inputId = "time_period",
-    label = "Select Time Period:",
-    choices = c("Total", "Last 24 Hours", "Last Week", "Last Month", "Last 6 Months", "Last Year"),
-    selected = "Total"
-  ),
-  
-  # Output: barplot
-  shinycssloaders::withSpinner(plotlyOutput(outputId = "bar_plot"))
-)
+# Graph 1
 
-# Define server logic required to draw barplot
-server <- function(input, output) {
-  # Render the bar chart
-  output$bar_plot <- renderPlotly({
-    # Set up parallel processing
-    plan(multisession, workers = availableCores())
-    
-    # Select the appropriate total_commits list based on user selection
-    selected_list <- switch(
-      input$time_period,
-      "Total" = total_commits_list <-
-        future_map_int(commit_activity_url_list, fetch_total_commits),
-      "Last 24 Hours" = total_commits_since_24_hours_list <-
-        future_map_int(commit_activity_url_list, fetch_total_commits_24hours),
-      "Last Week" = total_commits_since_last_7_days_list <-
-        future_map_int(
-          commit_activity_url_list,
-          fetch_total_commits_last_7_days
-        ),
-      "Last Month" = total_commits_since_last_month_list <-
-        future_map_int(
-          commit_activity_url_list,
-          fetch_total_commits_last_month
-        ),
-      "Last 6 Months" = total_commits_since_last_6_months_list <-
-        future_map_int(
-          commit_activity_url_list,
-          fetch_total_commits_last_6_months
-        ), 
-      "Last Year" = total_commits_since_last_year_list <-
-        future_map_int(
-          commit_activity_url_list,
-          fetch_total_commits_last_year
-        )
-    )
-    
-    # Create the bar chart using barplot
-    plot_ly(
-      x = repo_name,
-      y = selected_list,
-      type = "bar",
-      marker = list(color = "#007bc2"),
-      hoverinfo = paste(selected_list)
-    ) %>%
-      layout(
-        xaxis = list(title = "Repository Names in Descending Order from Most Trending to Least Trending"),
-        yaxis = list(title = "Total Commits"),
-        title = "Commits for the Top Trending Repositories on GitHub"
-      )
-    
-  })
-  
-}
 
-# Create Shiny app
-shinyApp(ui = ui, server = server)
 ```
 
 
 ```{r}
-# UI
-ui <- fluidPage(
-  h1("Top 5", targetLanguage, "Developers by Ranking"),
-  tableOutput("top_dev_table")
-)
-
-# Server
-server <- function(input, output) {
-  
-  # Render the table
-  output$top_dev_table <- renderTable({
-    # Subset the top 5 developers
-    top_dev_subset <- head(filteredTopDevDataFrame, 5)
-    
-    # Add a ranking column
-    top_dev_subset$Ranking <- 1:5
-    
-    # Return the data frame with the desired columns
-    top_dev_subset[, c("Ranking", "repo", "dev_name", "email")]
-  })
-}
-
-# Run the app
-shinyApp(ui, server)
+date_range = 'daily'
+language = 'Python'
 ```
+
+```{r}
+main <- function(date_range,language){
+  
+      # Fetch list of URLs within specified date-range
+      GIT_URLS <<- API_1_create_urls(date_range)
+
+      # Create data frame of repositories, programming languages, and language percentages
+      language_df = create_language_dataframe()
+      language_df = create_filtered_top_n_language_dataframe(language, language_df)
+      GIT_URLS <<- get_urls_from_list_of_repo_names(language_df)
+
+      # Create data frame of individual repository commits (incl. repository, developer name, email, date-time)
+      commits_df = create_commits_dataframe()
+      commits_count = count_commits_by_DevRepo(commits_df)
+
+      # Draw graphs
+    #  g1 = graph_langauges(languages_df)
+    #  g2 = graph_time_of_day(commits_df)
+    #  g3 = graph_num_commits(commits_df)
+}
+```
+
+```{r}
+main('daily','Python')
+```
+
+
 
