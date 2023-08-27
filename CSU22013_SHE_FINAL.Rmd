@@ -333,6 +333,18 @@ return(plot)
 
 ```
 
+
+```{r}
+# Graph 3: Data Table of developer names, repos and emails
+# Input: commits_count
+
+create_dev_info_table <- function(df){
+  
+  return(datatable(df[, -which(names(df) == "count")],options = list(scrollY = "300px")))
+
+}
+```
+
 ```{r}
 date_range = 'daily'
 language = 'all'
@@ -359,9 +371,9 @@ main <- function(date_range,language){
       commits_count = top_n_commiters_per_repo(commits_count)
 
       # Draw graphs
-    #  g1 = graph_langauges(languages_df)
-    #  g2 = graph_time_of_day(commits_df)
-    #  g3 = graph_num_commits(commits_df)
+      stackedLanguageBarplot = graph_languages(language_df)
+      groupedCommitsBarplot = graph_commits(commits_count)
+      dev_info_table <- create_dev_info_table(commits_count)
 }
 ```
 
@@ -386,7 +398,6 @@ ui <- shinyUI(fluidPage(
       plotlyOutput("stackedBarplot"),
       dataTableOutput("table"),
       plotlyOutput("groupedBarplot"),
-      #   plotOutput("graph4")
     )
   )
 ))
@@ -394,25 +405,21 @@ ui <- shinyUI(fluidPage(
 
 # Define server function
 server <- shinyServer(function(input, output) {
-  
-  # Call graph-generating functions
- # graph1_data <- graph_languages()
-#  graph2_data <- generate_graph3_data()
-#  graph3_data <- generate_graph4_data()
 
   output$stackedBarplot <- renderPlotly({
 
-    graph_languages(language_df)
+    stackedLanguageBarplot
+    
   })
 
   output$table <- renderDT({
 
-      datatable(commits_count[, -which(names(commits_count) == "count")],options = list(scrollY = "300px"))
+      dev_info_table
   })
 
   output$groupedBarplot <- renderPlotly({
 
-    graph_commits(commits_count)
+    groupedCommitsBarplot
   
   })
   
