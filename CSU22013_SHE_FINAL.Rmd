@@ -111,9 +111,9 @@ create_language_dataframe <- function() {
       values_fill = 0
     )
   
-  #tibble -> df
+  # Tibble -> df
   language_table = as.data.frame(language_table)
-  #colnames
+  # Colnames
   rownames(language_table) = language_table$repository
   language_table$repository <- NULL
   
@@ -138,12 +138,12 @@ create_filtered_top_n_language_dataframe <- function(language, language_df, n = 
   if (language == "all") {
       # Select the top 5 repositories based on trendiness
       return(head(language_df, n))
-  } 
+  }
   
   # Get the index of the chosen language in the data frame
   language_index <- which(colnames(language_df) == language)
     
-  # Filter repositories with non-zero percentage of chosen language
+  # Filter our repositories with zero% of chosen language
   filtered_repositories <- language_df[language_df[, language_index] > 0, ]
     
   # Select repositories, considering the case of less than 5 repositories
@@ -152,9 +152,6 @@ create_filtered_top_n_language_dataframe <- function(language, language_df, n = 
 
   return(top_repositories)
 }
-
-#filteredLanguageDataFrame <- create_filtered_top_5_language_dataframe(targetLanguage)
-
 ```
 
 Function which creates a data frame of every commit in the master branch of a repo. Each commit in data frame includes: Repository name, developer name, developer contact email, datetime commit published at
@@ -181,8 +178,9 @@ create_commits_dataframe <- function() {
       response <- GET(page_url, add_headers(API_PAT))
       commit_data <- content(response)
       
+      # Break if no more commits
       if (length(commit_data) == 0) {
-        break  # No more commits on this page
+        break  
       }
       
       df <- data.frame(
@@ -225,42 +223,46 @@ get_urls_from_list_of_repo_names  = function(language_df){
     
   return(filtered_urls)
 }
-
 ```
 
 
 ```{r}
 
 count_commits_by_DevRepo <- function(commits_df){
-  #return(aggregate(email ~ dev_name + repo + email, data = commits_df, FUN = length))
   
     aggregatedDataFrame = aggregate(email ~ dev_name + repo, data = commits_df, FUN = length)
     aggregatedDataFrame = setNames(aggregatedDataFrame, c('dev_name', 'repo', 'count'))
     aggregatedDataFrame = merge(x = aggregatedDataFrame, y = commits_df[,c('dev_name','email')], by = 'dev_name')
     
-    return(aggregatedDataFrame <- aggregatedDataFrame[!duplicated(aggregatedDataFrame[c("dev_name", "repo", "count", "email")]), ])
+    aggregatedDataFrame <- aggregatedDataFrame[!duplicated(aggregatedDataFrame[c("dev_name", "repo", "count", "email")]), ]
+    
+    aggregatedDataFrame <- aggregatedDataFrame[order(aggregatedDataFrame$repo, -aggregatedDataFrame$count),]
+    
+    return(aggregatedDataFrame)
 }
 
 ```
 
-
-
-
 ```{r}
-# Graph 1: Languages bar plot
-
-#graph_languages <- function(languages_df){
+top_n_commiters_per_repo <- function(commits_count, n = 5) {
   
-  # Find columns where all values are 0
-#cols_to_remove <- colnames(language_df)[apply(language_df, 2, function(col) all(col == 0))]
-
-# Remove the identified columns
-#language_df_filtered <- language_df[, !(colnames(language_df) %in% cols_to_remove)]
+  # Get unique repos 
+  unique_repos <- unique(commits_count$repo)
   
-#return(t(as.matrix(language_df_filtered)))
-#}
-
-#graph_languages(languages_df)
+  # Create new data frame to store top n data
+  result_df <- data.frame(dev = character(0), repo = character(0), counts = numeric(0))
+  
+  # Loop through each repository
+  for (repo in unique_repos) {
+    repo_data <- commits_count[commits_count$repo == repo, ]  # Get rows for each repo
+    top_devs <- repo_data[order(-repo_data$count), ][1:min(dim(repo_data)[1],n), ] # Order by count and get top n devs
+    result_df <- rbind(result_df, top_devs) # Rbind results to new data frame
+  }
+  
+  row.names(commits_count) <- 1:nrow(commits_count)
+  
+  return(result_df)
+}
 ```
 
 ```{r}
@@ -270,17 +272,17 @@ graph_languages <- function(df){
   # Find columns where all values are 0
   cols_to_remove <- colnames(df)[apply(df, 2, function(col) all(col == 0))]
 
-  # Remove the identified columns
+  # Remove zero value columns
   df_filtered <- df[, !(colnames(df) %in% cols_to_remove)]
 
   language_matrix <- t(as.matrix(df_filtered))
 
-  # Extract repository names
+  # Get remaining repository names
   repo_names <- df_filtered$Repo  
 
   stacked_barplot <- plot_ly()
 
-  # Add traces for each programming language
+  # Add a trace for each programming language
   for (i in 1:nrow(language_matrix)) {
     stacked_barplot <- stacked_barplot %>%
       add_trace(
@@ -307,22 +309,34 @@ graph_languages <- function(df){
 
 ```
 
-
-
 ```{r}
-# Graph 2: Dev commit count as grouped bar plot
+# Graph 2: Developer commit count barplot grouped by repo
 
-
-
+graph_commits <- function(df) {
+plot <- plot_ly(df, 
+                x = ~repo, 
+                y = ~count, 
+                text = ~paste("Developer: ", dev_name, "<br>No. Commits: ", count), 
+                hoverinfo = 'text', 
+                type = 'bar', 
+                split = ~dev_name) %>%
+  layout(
+    title = 'Number of Commits per Developer by Repository',
+    xaxis = list(title = 'Repository'),
+    yaxis = list(title = 'Number of Commits'),
+    barmode = 'group',
+    bargap = 0.01,        # Adjust the bargap value to increase the width of bars
+    bargroupgap = 0.01   # Adjust the bargroupgap value as needed
+  )
+return(plot)
+}
 
 ```
-
 
 ```{r}
 date_range = 'daily'
 language = 'all'
 ```
-
 
 ```{r}
 main <- function(date_range,language){
@@ -333,6 +347,8 @@ main <- function(date_range,language){
       # Create data frame of repositories, programming languages, and language percentages
       language_df = create_language_dataframe()
       dropdown_list <- get_list_of_languages(language_df)
+      dropdown_list <- c("all", dropdown_list)
+
       
       language_df = create_filtered_top_n_language_dataframe(language, language_df)
       GIT_URLS <<- get_urls_from_list_of_repo_names(language_df)
@@ -340,6 +356,7 @@ main <- function(date_range,language){
       # Create data frame of individual repository commits (incl. repository, developer name, email, date-time)
       commits_df = create_commits_dataframe()
       commits_count = count_commits_by_DevRepo(commits_df)
+      commits_count = top_n_commiters_per_repo(commits_count)
 
       # Draw graphs
     #  g1 = graph_langauges(languages_df)
@@ -348,19 +365,32 @@ main <- function(date_range,language){
 }
 ```
 
+
 ```{r}
-ui <- shinyUI(
-  fluidPage(
-    # Dashboard structure
-    titlePanel("Graph Dashboard"),
+ui <- shinyUI(fluidPage(
+
+  titlePanel("Graph Dashboard"),
+  
+  sidebarLayout(
+    sidebarPanel(selectInput(
+      "dropdown",
+      "Sort by GitHub Date Range:",
+      choices = c("Daily", "Weekly", "Monthly")
+    ),
+    selectInput(
+      "dropdown",
+      "Sort by Programming Language:",
+      choices = dropdown_list
+    )),
     mainPanel(
       plotlyOutput("stackedBarplot"),
       dataTableOutput("table"),
-    #  plotOutput("graph3"),
-   #   plotOutput("graph4")
+      plotlyOutput("groupedBarplot"),
+      #   plotOutput("graph4")
     )
   )
-)
+))
+
 
 # Define server function
 server <- shinyServer(function(input, output) {
@@ -370,26 +400,22 @@ server <- shinyServer(function(input, output) {
 #  graph2_data <- generate_graph3_data()
 #  graph3_data <- generate_graph4_data()
 
-  # Render graphs
   output$stackedBarplot <- renderPlotly({
-    # Create and customize the plot 
+
     graph_languages(language_df)
   })
 
   output$table <- renderDT({
-    # Create and customize the plot 
+
       datatable(commits_count[, -which(names(commits_count) == "count")],options = list(scrollY = "300px"))
   })
 
-#  output$graph3 <- renderPlot({
-    # Create and customize the plot 
+  output$groupedBarplot <- renderPlotly({
 
-#  })
-
-#  output$graph4 <- renderPlot({
-    # Create and customize the plot
-
-#  })
+    graph_commits(commits_count)
+  
+  })
+  
 })
 
 # Run the Shiny app
