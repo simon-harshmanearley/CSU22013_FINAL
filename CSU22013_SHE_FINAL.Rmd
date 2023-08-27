@@ -27,6 +27,7 @@ library(dplyr)
 library(tidyr)
 library(scales)
 library(ggplot2)
+library(DT)
 
 # Personal Access Token for GitHub API
 API_PAT <<- c(Authorization = paste("Bearer", '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'))
@@ -134,7 +135,7 @@ Function which filters languageDataFrame by programming language, returning the 
 # Function to create data frame to display the top 5 trending repositories, filtering by programming language. "total" returns top 5 generally
 create_filtered_top_n_language_dataframe <- function(language, language_df, n = 5) {
   
-  if (language == "total") {
+  if (language == "all") {
       # Select the top 5 repositories based on trendiness
       return(head(language_df, n))
   } 
@@ -204,6 +205,15 @@ create_commits_dataframe <- function() {
 ```
 
 ```{r}
+get_list_of_languages <- function(language_df){
+  
+  return(colnames(language_df))
+  
+}
+```
+
+
+```{r}
 get_urls_from_list_of_repo_names  = function(language_df){
     filtered_urls <- list()
     for(url in GIT_URLS){
@@ -218,12 +228,18 @@ get_urls_from_list_of_repo_names  = function(language_df){
 
 ```
 
+
 ```{r}
 
 count_commits_by_DevRepo <- function(commits_df){
-  return(aggregate(email ~ dev_name + repo, data = commits_df, FUN = length))
+  #return(aggregate(email ~ dev_name + repo + email, data = commits_df, FUN = length))
+  
+    aggregatedDataFrame = aggregate(email ~ dev_name + repo, data = commits_df, FUN = length)
+    aggregatedDataFrame = setNames(aggregatedDataFrame, c('dev_name', 'repo', 'count'))
+    aggregatedDataFrame = merge(x = aggregatedDataFrame, y = commits_df[,c('dev_name','email')], by = 'dev_name')
+    
+    return(aggregatedDataFrame <- aggregatedDataFrame[!duplicated(aggregatedDataFrame[c("dev_name", "repo", "count", "email")]), ])
 }
-
 
 ```
 
@@ -231,30 +247,80 @@ count_commits_by_DevRepo <- function(commits_df){
 
 
 ```{r}
-# Graph 1: Languages
+# Graph 1: Languages bar plot
 
-graph_languages <- function(languages_df){
+#graph_languages <- function(languages_df){
   
   # Find columns where all values are 0
-cols_to_remove <- colnames(language_df)[apply(language_df, 2, function(col) all(col == 0))]
+#cols_to_remove <- colnames(language_df)[apply(language_df, 2, function(col) all(col == 0))]
 
 # Remove the identified columns
-language_df_filtered <- language_df[, !(colnames(language_df) %in% cols_to_remove)]
+#language_df_filtered <- language_df[, !(colnames(language_df) %in% cols_to_remove)]
   
-  language_matrix <- t(as.matrix(language_df_filtered))
+#return(t(as.matrix(language_df_filtered)))
+#}
 
-# Plot the stacked bar chart
-barplot(language_matrix, beside = FALSE,  names.arg = language_df$Repo,
-        main = "Languages by Repository", xlab = "Repository", ylab = "Percentage",
-        legend.text = names(colors), args.legend = list(x = "topright", bty = "n"))
-}
+#graph_languages(languages_df)
 ```
 
+```{r}
+# Graph 1: Languages Stacked Barplot
+
+graph_languages <- function(df){
+  # Find columns where all values are 0
+  cols_to_remove <- colnames(df)[apply(df, 2, function(col) all(col == 0))]
+
+  # Remove the identified columns
+  df_filtered <- df[, !(colnames(df) %in% cols_to_remove)]
+
+  language_matrix <- t(as.matrix(df_filtered))
+
+  # Extract repository names
+  repo_names <- df_filtered$Repo  
+
+  stacked_barplot <- plot_ly()
+
+  # Add traces for each programming language
+  for (i in 1:nrow(language_matrix)) {
+    stacked_barplot <- stacked_barplot %>%
+      add_trace(
+        x = repo_names,
+        y = language_matrix[i, ],
+        type = "bar",
+        name = rownames(language_matrix)[i]
+      )
+  }
+
+  # Generate bar plot
+  stacked_barplot <- stacked_barplot %>%
+    layout(
+      title = "Percentage Breakdown of Languages by Repository",
+      xaxis = list(title = "Repository"),
+      yaxis = list(title = "Percentage"),
+      barmode = "stack"
+    )
+  
+  return(stacked_barplot)
+}
+
+
+
+```
+
+
+
+```{r}
+# Graph 2: Dev commit count as grouped bar plot
+
+
+
+
+```
 
 
 ```{r}
 date_range = 'daily'
-language = 'Python'
+language = 'all'
 ```
 
 
@@ -266,6 +332,8 @@ main <- function(date_range,language){
 
       # Create data frame of repositories, programming languages, and language percentages
       language_df = create_language_dataframe()
+      dropdown_list <- get_list_of_languages(language_df)
+      
       language_df = create_filtered_top_n_language_dataframe(language, language_df)
       GIT_URLS <<- get_urls_from_list_of_repo_names(language_df)
 
@@ -281,8 +349,50 @@ main <- function(date_range,language){
 ```
 
 ```{r}
-main('daily','Python')
+ui <- shinyUI(
+  fluidPage(
+    # Dashboard structure
+    titlePanel("Graph Dashboard"),
+    mainPanel(
+      plotlyOutput("stackedBarplot"),
+      dataTableOutput("table"),
+    #  plotOutput("graph3"),
+   #   plotOutput("graph4")
+    )
+  )
+)
+
+# Define server function
+server <- shinyServer(function(input, output) {
+  
+  # Call graph-generating functions
+ # graph1_data <- graph_languages()
+#  graph2_data <- generate_graph3_data()
+#  graph3_data <- generate_graph4_data()
+
+  # Render graphs
+  output$stackedBarplot <- renderPlotly({
+    # Create and customize the plot 
+    graph_languages(language_df)
+  })
+
+  output$table <- renderDT({
+    # Create and customize the plot 
+      datatable(commits_count[, -which(names(commits_count) == "count")],options = list(scrollY = "300px"))
+  })
+
+#  output$graph3 <- renderPlot({
+    # Create and customize the plot 
+
+#  })
+
+#  output$graph4 <- renderPlot({
+    # Create and customize the plot
+
+#  })
+})
+
+# Run the Shiny app
+shinyApp(ui, server)
 ```
-
-
 
