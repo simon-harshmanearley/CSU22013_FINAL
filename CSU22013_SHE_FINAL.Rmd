@@ -28,6 +28,7 @@ library(tidyr)
 library(scales)
 library(ggplot2)
 library(DT)
+library(shinycssloaders)
 
 # Personal Access Token for GitHub API
 API_PAT <<- c(Authorization = paste("Bearer", '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'))
@@ -267,7 +268,9 @@ top_n_commiters_per_repo <- function(commits_count, n = 5) {
     result_df <- rbind(result_df, top_devs) # Add results to new data frame
   }
   
-  row.names(commits_count) <- 1:nrow(commits_count)
+  row.names(result_df) <- 1:nrow(result_df)
+  
+
   
   return(result_df)
 }
@@ -276,6 +279,7 @@ top_n_commiters_per_repo <- function(commits_count, n = 5) {
 ```{r}
 # Function: Create a percentage stacked bar plot for total languages used within top n repositories
 graph_languages <- function(df){
+  
   # print('graph_languages')
   # Find columns where all values are 0
   cols_to_remove <- colnames(df)[apply(df, 2, function(col) all(col == 0))]
@@ -286,7 +290,7 @@ graph_languages <- function(df){
   language_matrix <- t(as.matrix(df_filtered))
 
   # Get remaining repository names
-  repo_names <- df_filtered$Repo  
+  repo_names <- rownames(df_filtered)
 
   stacked_barplot <- plot_ly()
 
@@ -464,11 +468,9 @@ ui <- shinyUI(fluidPage(
       choices = getLanguages()
     )),
     mainPanel(
-      # textOutput("selected_options1"),
-      # textOutput("selected_options2"),
-      plotlyOutput("groupedBarplot"),
-      plotlyOutput("stackedBarplot"),
-      dataTableOutput("table")
+      withSpinner(plotlyOutput("groupedBarplot")),
+      withSpinner(plotlyOutput("stackedBarplot")),
+      withSpinner(dataTableOutput("table"))
     )
   )
 ))
