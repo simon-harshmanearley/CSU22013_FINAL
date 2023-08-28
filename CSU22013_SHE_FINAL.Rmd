@@ -456,7 +456,7 @@ ui <- shinyUI(fluidPage(
     
   sidebarLayout(
     # Date range drop-down menu
-    sidebarPanel(selectInput(
+    sidebarPanel(width = 2, selectInput(
       "date_range_dropdown",
       "GitHub Date Range:",
       choices = c("Daily", "Weekly", "Monthly")
