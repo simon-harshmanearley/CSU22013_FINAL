@@ -42,27 +42,27 @@ PAGE_LIMITS <<- 5
 Function to Create base URL, to which /commits or /languages can be appended. Daterange fetches either top repositories from last day, week, or month.
 
 ```{r}
-# Function: Get list of base URLs for top repositories
+# Function: Get list of base URLs for trending repositories
 API_1_create_urls <- function(date_range){
-  print('###################### API_1 ######################')
+  #print('###################### API_1 ######################')
   # Call to MIT GitHub API to get information on current top trending repositories
   url <- "https://api.gitterapp.com/repositories?since=daily"
   response <- GET(url, query = list(since = date_range))
   repo_data <- content(response)
   
-  # Retrieve list of top N authors
+  # Retrieve list of trending authors
   repo_author <- lapply(repo_data, "[[", 1)
  
-  # Retrieve list of top N repository names
+  # Retrieve list of trending repository names
   repo_name <- lapply(repo_data, "[[", 2)
 
-# Function which manually creates URL to commit activity of each repository
+# Function: Manually create base URL to repository
   create_url <- function(repo_author, repo_name) {
   url <- paste0("https://api.github.com/repos/", repo_author, "/", repo_name)
   return(url)
   }
 
-  # Create list of URLs to commit activity of top N repositories
+  # Create list of URLs to top repositories
   url <- mapply(create_url, repo_author, repo_name, SIMPLIFY = FALSE)
   url_list <- as.character(url)
   
@@ -76,17 +76,16 @@ Function which creates data frame of each repository, their languages and percen
 # languageDataFrame
 # Function to fetch language percentages per repository
 create_language_dataframe <- function() {
-  print('###################### API_2 ######################')
+  #print('###################### API_2 ######################')
   # Initialise list
   language_data_list <- list()
   
   # Loop through each URL
   for (url in GIT_URLS) {
 
-    repo_name <-
-      strsplit(url, "/")[[1]][6]  # Get repository name from URL
-    url <- paste0(url, "/languages")
-    
+    repo_name <- strsplit(url, "/")[[1]][6]  # Get repository name from URL
+    url <- paste0(url, "/languages")         # Append /languages to base URL
+      
     response <- GET(url, add_headers(API_PAT))
     language_data <- content(response)
 
@@ -136,21 +135,21 @@ Function which filters languageDataFrame by programming language, returning the 
 
 ```{r}
 # filteredLanguageDataFrame
-# Function to create data frame to display the top 5 trending repositories, filtering by programming language. "total" returns top 5 generally
+# Function: Create data frame to display the top 5 trending repositories, filtering by programming language. "All" returns top 5 generally
 create_filtered_top_n_language_dataframe <- function(language, language_df, n = 5) {
-  print('create_filtered_top_n_language_dataframe')
+  # print('create_filtered_top_n_language_dataframe')
   if (language == "All") {
-      # Select the top 5 repositories based on trendiness
+      # Select the top n repositories based on trendiness
       return(head(language_df, n))
   }
   
   # Get the index of the chosen language in the data frame
   language_index <- which(colnames(language_df) == language)
     
-  # Filter our repositories with zero% of chosen language
+  # Filter out repositories with zero% of chosen language
   filtered_repositories <- language_df[language_df[, language_index] > 0, ]
     
-  # Select repositories, considering the case of less than 5 repositories
+  # Select repositories, considering the case of less than n repositories
   num_repositories <- min(nrow(filtered_repositories), n)
   top_repositories <- filtered_repositories[1:num_repositories, ]
 
@@ -162,9 +161,9 @@ Function which creates a data frame of every commit in the master branch of a re
 
 ```{r}
 # commitDataFrame
-# Function which gets the entire commit history of x number of repositories from top trending
+# Function: Get the entire commit history of n number of repositories from top trending
 create_commits_dataframe <- function() {
-  print('create_commits_dataframe')
+  # print('create_commits_dataframe')
   # Initialize an empty data frame to store the commit information
   cols = c('repo','dev_name','email','datetime')
   data_table = data.frame(matrix(nrow = 0, ncol = length(cols))) 
@@ -173,6 +172,7 @@ create_commits_dataframe <- function() {
   # Loop through each commit activity URL
   for (url in GIT_URLS_FILTERED) {
     
+    # Append /commits to base URL
     url <- paste0(url, "/commits")
     
     page <- 1
@@ -194,7 +194,7 @@ create_commits_dataframe <- function() {
         datetime = c(unlist(lapply(commit_data, function (x) x$commit$author$date)))
       )
       
-
+      # Add commit data to main data frame
       data_table <- rbind(data_table, df) 
       page <- page + 1
     }
@@ -209,7 +209,7 @@ create_commits_dataframe <- function() {
 ```{r}
 # Function: Retrieve a list of all of the languages used in top repositories
 get_list_of_languages <- function(language_df){
-  print('get_list_of_languages')
+  #print('get_list_of_languages')
   return(colnames(language_df))
   
 }
@@ -219,7 +219,7 @@ get_list_of_languages <- function(language_df){
 ```{r}
 # Function: Get the URLs from list of repositories
 get_urls_from_list_of_repo_names  = function(language_df){
-   print('get_urls_from_list_of_repo_names')
+   #print('get_urls_from_list_of_repo_names')
     filtered_urls <- list()
     for(url in GIT_URLS){
       name <- strsplit(url, "/")[[1]][6]
@@ -236,7 +236,7 @@ get_urls_from_list_of_repo_names  = function(language_df){
 ```{r}
 # Function: Count of all commits grouped by repo and then developer. Email for each developer included
 count_commits_by_DevRepo <- function(commits_df){
-    print('count_commits_by_DevRepo')
+    # print('count_commits_by_DevRepo')
     aggregatedDataFrame = aggregate(email ~ dev_name + repo, data = commits_df, FUN = length)
     aggregatedDataFrame = setNames(aggregatedDataFrame, c('dev_name', 'repo', 'count'))
     aggregatedDataFrame = merge(x = aggregatedDataFrame, y = commits_df[,c('dev_name','email')], by = 'dev_name')
@@ -253,7 +253,7 @@ count_commits_by_DevRepo <- function(commits_df){
 ```{r}
 # Function: Get the top n developers, per top n repository
 top_n_commiters_per_repo <- function(commits_count, n = 5) {
-  print('top_n_commiters_per_repo')
+  # print('top_n_commiters_per_repo')
   # Get unique repos 
   unique_repos <- unique(commits_count$repo)
   
@@ -264,7 +264,7 @@ top_n_commiters_per_repo <- function(commits_count, n = 5) {
   for (repo in unique_repos) {
     repo_data <- commits_count[commits_count$repo == repo, ]  # Get rows for each repo
     top_devs <- repo_data[order(-repo_data$count), ][1:min(dim(repo_data)[1],n), ] # Order by count and get top n devs
-    result_df <- rbind(result_df, top_devs) # Rbind results to new data frame
+    result_df <- rbind(result_df, top_devs) # Add results to new data frame
   }
   
   row.names(commits_count) <- 1:nrow(commits_count)
@@ -275,9 +275,8 @@ top_n_commiters_per_repo <- function(commits_count, n = 5) {
 
 ```{r}
 # Function: Create a percentage stacked bar plot for total languages used within top n repositories
-
 graph_languages <- function(df){
-  print('graph_languages')
+  # print('graph_languages')
   # Find columns where all values are 0
   cols_to_remove <- colnames(df)[apply(df, 2, function(col) all(col == 0))]
 
@@ -305,7 +304,7 @@ graph_languages <- function(df){
   # Generate bar plot
   stacked_barplot <- stacked_barplot %>%
     layout(
-      title = "Percentage Breakdown of Languages by Repository",
+      title = "Percentage Breakdown of Languages by Top 5 Repository",
       xaxis = list(title = "Repository"),
       yaxis = list(title = "Percentage"),
       barmode = "stack"
@@ -322,7 +321,7 @@ graph_languages <- function(df){
 # Function: Create a grouped barplot of top n developers for top n repos, commit counts
 
 graph_commits <- function(df) {
-   print('graph_commits')
+   # print('graph_commits')
 plot <- plot_ly(df, 
                 x = ~repo, 
                 y = ~count, 
@@ -331,7 +330,7 @@ plot <- plot_ly(df,
                 type = 'bar', 
                 split = ~dev_name) %>%
   layout(
-    title = 'Number of Commits per Developer by Repository',
+    title = 'Number of Commits per Top 5 Developer by Repository',
     xaxis = list(title = 'Repository'),
     yaxis = list(title = 'Number of Commits'),
     barmode = 'group'
@@ -356,7 +355,7 @@ create_dev_info_table <- function(df){
 PLOTTERS 
 
 ```{r}
-# Retrieves data for programming languages percentage stacked bar chart
+# Function: Retrieves data for programming languages percentage stacked bar chart
 stackedLanguageBarplot <- function(language_df_filtered) {
   
   return(graph_languages(language_df_filtered)) 
@@ -407,14 +406,6 @@ language_event <- function(input, output, language){
       # Calculate top 5 developers for each repo, based on number of commits
       commits_count = top_n_commiters_per_repo(commits_count)
       
-      # output$selected_options1 <- renderText({
-      #     paste("You selected:", paste(input$date_range_dropdown, collapse = ", "))
-      # })
-      # 
-      # output$selected_options2 <- renderText({
-      #   paste("You selected:", paste(input$language_dropdown, collapse = ", "))
-      # })
-      
       # Display stacked language bar plot
       output$stackedBarplot <- renderPlotly({
         stackedLanguageBarplot(language_df_filtered)
@@ -436,7 +427,7 @@ language_event <- function(input, output, language){
 
 
 ```{r}
-# Function: Populates dop-down list
+# Function: Populates drop-down list
 getLanguages <- function() {
       
       dropdown_list <- get_list_of_languages(LANGUAGE_DF)
@@ -460,15 +451,17 @@ ui <- shinyUI(fluidPage(
   titlePanel("Trending Repositories on GitHub"),
     
   sidebarLayout(
+    # Date range drop-down menu
     sidebarPanel(selectInput(
       "date_range_dropdown",
-      "Sort by GitHub Date Range:",
+      "GitHub Date Range:",
       choices = c("Daily", "Weekly", "Monthly")
     ),
     selectInput(
+      # Language drop-down menu
       "language_dropdown",
-      "Sort by Programming Language:",
-      choices = getLanguages(daterange, language)
+      "Programming Language:",
+      choices = getLanguages()
     )),
     mainPanel(
       # textOutput("selected_options1"),
@@ -488,7 +481,6 @@ server <- shinyServer(function(input, output) {
     date_range_event(input$date_range_dropdown)
     output <- language_event(input, output, input$language_dropdown)
   })
-  
 
   observeEvent(input$language_dropdown,{
     output <- language_event(input, output, input$language_dropdown)
