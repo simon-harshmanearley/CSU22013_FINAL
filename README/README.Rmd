@@ -13,13 +13,15 @@ output:
 
 # :blue_book: Overview
 
-A HR recruitment tool for tech companies looking to hire motivated developers based on top trending GitHub repositories.
+A HR recruitment tool for tech companies looking to hire motivated developers based on top trending GitHub repositories.\
 Items on dashboard include\   
   - A percentage stacked bar plot\
   - A grouped bar plot\
   - An information table
+  
+Link to website: 
 
-# :heavy_exclamation_mark: Requirements 
+# :heavy_exclamation_mark: Requirements For Running Locally 
 
 The software packages below must be installed a prerequisite to viewing the code
 

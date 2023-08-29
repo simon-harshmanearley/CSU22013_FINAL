@@ -128,6 +128,9 @@ create_language_dataframe <- function() {
   # Calculate the percentage of each column by row to 2 decimal places
   language_table <- round(language_table / row_sums, 2)
   
+  #Remove languages that contribute less than 1% of the code
+  language_table <- language_table[,colSums(language_table != 0) > 0]
+  
   return(language_table)
 }
 ```
@@ -434,7 +437,7 @@ language_event <- function(input, output, language){
 # Function: Populates drop-down list
 getLanguages <- function() {
       
-      dropdown_list <- get_list_of_languages(LANGUAGE_DF)
+      dropdown_list <- sort(get_list_of_languages(LANGUAGE_DF))
       dropdown_list <- c("All", dropdown_list)
       
       return(dropdown_list)
@@ -481,7 +484,7 @@ server <- shinyServer(function(input, output) {
   
   observeEvent(input$date_range_dropdown, {
     date_range_event(input$date_range_dropdown)
-    output <- language_event(input, output, input$language_dropdown)
+    output <- language_event(input, output, "All")
   })
 
   observeEvent(input$language_dropdown,{
