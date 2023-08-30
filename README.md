@@ -23,6 +23,10 @@ include 
 - A grouped bar plot  
 - An information table
 
+Link to app website: https://tcdsihaea.shinyapps.io/githubrecruitment/
+
+Link to demonstration video: https://vimeo.com/859445583?share=copy
+
 # :heavy_exclamation_mark: Requirements
 
 The software packages below must be installed a prerequisite to viewing
