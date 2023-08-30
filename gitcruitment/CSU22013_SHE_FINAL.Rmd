@@ -22,13 +22,6 @@ library(scales)
 library(ggplot2)
 library(DT)
 library(shinycssloaders)
-    
-# Shiny hosting token
-rsconnect::setAccountInfo(name='sihaea', token='A383C1C26BF2056798E8574E2D9327BA', secret='z6Z3Fyk079C+RdqJuVyqKFj6Oi49NNdmyOEaudeo')
-
-# Shiny hosting library
-library(rsconnect)
-    rsconnect::deployApp('/Users/simon/Documents/GitHub/CSU22013_FINAL/Project')
 
 # Personal Access Token for GitHub API
 API_PAT <<- c(Authorization = paste("Bearer", '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'))

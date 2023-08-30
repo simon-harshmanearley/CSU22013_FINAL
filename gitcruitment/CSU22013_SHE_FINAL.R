@@ -13,13 +13,15 @@ library(DT)
 library(shinycssloaders)
 
 # Shiny hosting token
-rsconnect::setAccountInfo(name='sihaea', token='A383C1C26BF2056798E8574E2D9327BA', secret='z6Z3Fyk079C+RdqJuVyqKFj6Oi49NNdmyOEaudeo')
+#rsconnect::setAccountInfo(name='sihaea', token='A383C1C26BF2056798E8574E2D9327BA', secret='z6Z3Fyk079C+RdqJuVyqKFj6Oi49NNdmyOEaudeo')
+rsconnect::setAccountInfo(name='tcdsihaea', token='072B94F9254E28B9FEECBB25F3E8205F', secret='eoF3vHnO6SPDntLQjvv6FWVt2JViyZhE/M1X39cN')
 
 # Shiny hosting library
 library(rsconnect)
-rsconnect::deployApp('~/Users/simon/Documents/GitHub/CSU22013_FINAL/gitcruitment')
+rsconnect::deployApp(forceUpdate = TRUE, appName="githubrecruitment")
+#rsconnect::showLogs(appName="githubrecruitment",streaming=TRUE)
 
-# Personal Access Token for GitHub API
+# Personal Access Token for GitHub API1
 API_PAT <<- c(Authorization = paste("Bearer", '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'))
 PAGE_LIMITS <<- 5
 
@@ -377,51 +379,6 @@ getLanguages <- function() {
 }
 
 date_range_event('daily')
-
-ui <- shinyUI(fluidPage(
-  
-  titlePanel("Developer Recruitment Tool"),
-  
-  sidebarLayout(
-    # Date range drop-down menu
-    sidebarPanel(width = 2, selectInput(
-      "date_range_dropdown",
-      "GitHub Date Range:",
-      choices = c("Daily", "Weekly", "Monthly")
-    ),
-    selectInput(
-      # Language drop-down menu
-      "language_dropdown",
-      "Programming Language:",
-      choices = getLanguages()
-    )),
-    mainPanel(
-      withSpinner(plotlyOutput("groupedBarplot")),
-      withSpinner(plotlyOutput("stackedBarplot")),
-      withSpinner(dataTableOutput("table"))
-    )
-  )
-))
-
-
-# Define server function
-server <- shinyServer(function(input, output, session) {
-  
-  observeEvent(input$date_range_dropdown, {
-    
-    # Update data from GitHub
-    date_range_event(input$date_range_dropdown)
-    
-    # Update language input with new languages
-    updateSelectInput(session, "language_dropdown", choices = getLanguages())
-  })
-  
-  observeEvent(input$language_dropdown,{
-    output <- language_event(input, output, input$language_dropdown)
-    
-  })
-  
-})
 
 # Run the Shiny app
 shinyApp(ui, server)

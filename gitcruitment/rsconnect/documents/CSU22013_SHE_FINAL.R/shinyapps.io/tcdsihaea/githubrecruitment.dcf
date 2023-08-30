@@ -1,0 +1,13 @@
+name: githubrecruitment
+title: githubrecruitment
+username: tcdsihaea
+account: tcdsihaea
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9720122
+bundleId: 7626252
+url: https://tcdsihaea.shinyapps.io/githubrecruitment/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: CSU22013_SHE_FINAL.html|CSU22013_SHE_FINAL.Rmd
