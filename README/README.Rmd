@@ -19,7 +19,9 @@ Items on dashboard include\
   - A grouped bar plot\
   - An information table
   
-Link to website: 
+Link to app website: https://tcdsihaea.shinyapps.io/githubrecruitment/
+
+Link to demonstration video: https://vimeo.com/859445583?share=copy
 
 # :heavy_exclamation_mark: Requirements For Running Locally 
 
