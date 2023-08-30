@@ -1626,19 +1626,9 @@ GitHub.</h1>
 </div>
 
 
-<p>The following chunk utilises the MIT GitHub API found at, <a href="https://github.com/alisoft/github-trending-api#readme" class="uri">https://github.com/alisoft/github-trending-api#readme</a>
-(Full license citation to be added).</p>
-<p>The purpose of using this API is to create a list of the top trending
-repositories on GitHub, to be used later in conjunction with the
-official GitHub API, which will allow access to the commit data of each
-individual repository.</p>
-<p>The following code firstly accesses the API, and then retrieves a
-list of the top trending authors and repository names, in order to
-manually create a list of URLs to the commit data, which the official
-GitHub API will then use.</p>
-<p>A URL to a repositories commit data is as follows: “<a href="https://api.github.com/repos/" class="uri">https://api.github.com/repos/</a>”, repo_author, “/”,
-repo_name, “/commits”</p>
-<pre class="r"><code>library(httr)
+<p>Libraries, Hosting, Tokens, Globals</p>
+<pre class="r"><code># Libraries
+library(httr)
 library(jsonlite)
 library(furrr)</code></pre>
 <pre><code>## Loading required package: future</code></pre>
@@ -1648,127 +1638,504 @@ library(furrr)</code></pre>
 <pre><code>## The following object is masked from &#39;package:jsonlite&#39;:
 ## 
 ##     validate</code></pre>
-<pre class="r"><code># Access information on top trending repositories using the MIT GitHub API 
-url &lt;- &quot;https://api.gitterapp.com/repositories?since=daily&quot;
-response &lt;- GET(url)
-repo_data &lt;- content(response)
+<pre class="r"><code>library(shinyjs)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;shinyjs&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:shiny&#39;:
+## 
+##     runExample</code></pre>
+<pre><code>## The following objects are masked from &#39;package:methods&#39;:
+## 
+##     removeClass, show</code></pre>
+<pre class="r"><code>library(plotly)</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre><code>## 
+## Attaching package: &#39;plotly&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:ggplot2&#39;:
+## 
+##     last_plot</code></pre>
+<pre><code>## The following object is masked from &#39;package:httr&#39;:
+## 
+##     config</code></pre>
+<pre><code>## The following object is masked from &#39;package:stats&#39;:
+## 
+##     filter</code></pre>
+<pre><code>## The following object is masked from &#39;package:graphics&#39;:
+## 
+##     layout</code></pre>
+<pre class="r"><code>library(dplyr)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;dplyr&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:stats&#39;:
+## 
+##     filter, lag</code></pre>
+<pre><code>## The following objects are masked from &#39;package:base&#39;:
+## 
+##     intersect, setdiff, setequal, union</code></pre>
+<pre class="r"><code>library(tidyr)
+library(scales)
+library(ggplot2)
+library(DT)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;DT&#39;</code></pre>
+<pre><code>## The following objects are masked from &#39;package:shiny&#39;:
+## 
+##     dataTableOutput, renderDataTable</code></pre>
+<pre class="r"><code>library(shinycssloaders)
+    
+# Shiny hosting token
+rsconnect::setAccountInfo(name=&#39;sihaea&#39;, token=&#39;A383C1C26BF2056798E8574E2D9327BA&#39;, secret=&#39;z6Z3Fyk079C+RdqJuVyqKFj6Oi49NNdmyOEaudeo&#39;)
 
-# Retrieve list of top 10 authors
-repo_author &lt;- lapply(repo_data, &quot;[[&quot;, 1)
-repo_author &lt;- repo_author[1:10]
-
-# Retrieve list of top 10 repository names
-repo_name &lt;- lapply(repo_data, &quot;[[&quot;, 2)
-repo_name &lt;- repo_name[1:10]
-
-# Function which manually creates URL to commit activity of each repository
-create_commit_activity_url &lt;- function(repo_author, repo_name){
-  paste0(&quot;https://api.github.com/repos/&quot;, repo_author, &quot;/&quot;, repo_name, &quot;/commits&quot;)
-}
-
-# Create list of URLs to commit activity of top 10 repositories
-commit_activity_url &lt;- mapply(create_commit_activity_url, repo_author, repo_name, SIMPLIFY = FALSE)
-commit_activity_url_list &lt;- as.character(commit_activity_url)</code></pre>
-<p>The following chunk concerns the official GitHub API, found at, <a href="https://docs.github.com/en/rest?apiVersion=2022-11-28" class="uri">https://docs.github.com/en/rest?apiVersion=2022-11-28</a>.</p>
-<p>Unfortunately there is no header within the API for any kind of
-‘total commit count’, however it is possible to search page-by-page
-through the commit history. The maximum commits which can be displayed
-per page is 100. In order to retrieve the total number of commits per
-repository, I created a function which loops through each page of the
-commit history, counting up to 100 commits at a time, until there are no
-more commits left to count. The function does this for the top 10
-trending repositories, the list for which was created in the previous
-chunk.</p>
-<p>Initially, I was calculating the total commits for the top 25
-repositories, however this was taking approximately 3 minutes to
-complete, so I decided to only analyse the top 10 repositories.</p>
-<p>The process in my testing takes approximately 30 seconds, however
-depending on the total number of commits within the top 10 repositories,
-this could take a longer, or shorter length of time.</p>
+# Shiny hosting library
+library(rsconnect)</code></pre>
+<pre><code>## 
+## Attaching package: &#39;rsconnect&#39;</code></pre>
+<pre><code>## The following object is masked from &#39;package:shiny&#39;:
+## 
+##     serverInfo</code></pre>
+<pre class="r"><code>    rsconnect::deployApp(&#39;/Users/simon/Documents/GitHub/CSU22013_FINAL/Project/CSU22013_SHE_FINAL.Rmd&#39;)</code></pre>
+<pre><code>## Warning: The `appDir` argument of `deployApp()` takes a directory, not a document, as of
+## rsconnect 1.0.0.
+## ℹ Please use `deployDoc()` instead.
+## This warning is displayed once every 8 hours.
+## Call `lifecycle::last_lifecycle_warnings()` to see where this warning was
+## generated.</code></pre>
+<pre><code>## ℹ Discovering document dependencies...</code></pre>
+<pre><code>## ✔ Document dependencies discovered</code></pre>
+<pre><code>## The following potential problems were identified in the project files:</code></pre>
+<pre><code>## ----------------------
+## CSU22013_SHE_FINAL.Rmd
+## ----------------------
+## The following lines contain absolute paths:
+## 31:     rsconnect::deployApp(&#39;/Users/simon/Documents/GitHub/CSU22013_FINAL/Project/CSU22013_SHE_FINAL.Rmd&#39;)
+## 
+## Paths should be to files within the project directory.</code></pre>
+<pre><code>## If your code fails to run post-deployment, please double-check these messages.</code></pre>
+<pre><code>## ── Preparing for deployment ────────────────────────────────────────────────────</code></pre>
+<pre><code>## ✔ Re-deploying &quot;csu22013_she_final&quot; to &quot;server: shinyapps.io / username: sihaea&quot;</code></pre>
+<pre><code>## ℹ Looking up application with id &quot;9716570&quot;...</code></pre>
+<pre><code>## ✔ Found application &lt;https://sihaea.shinyapps.io/csu22013_she_final/&gt;</code></pre>
+<pre><code>## ℹ Bundling 1 file: &#39;CSU22013_SHE_FINAL.Rmd&#39;</code></pre>
+<pre><code>## ℹ Capturing R dependencies with renv</code></pre>
+<pre><code>## ✔ Found 90 dependencies</code></pre>
+<pre><code>## ✔ Created 53,275b bundle</code></pre>
+<pre><code>## ℹ Uploading bundle...</code></pre>
+<pre><code>## ✔ Uploaded bundle with id 7624873</code></pre>
+<pre><code>## ── Deploying to server ─────────────────────────────────────────────────────────</code></pre>
+<pre><code>## Waiting for task: 1331306942
+##   building: Building image: 9027873
+##   building: Fetching packages
+##   building: Installing packages
+##   building: Installing files
+##   building: Pushing image: 9027873
+##   deploying: Starting instances
+##   terminating: Stopping old instances</code></pre>
+<pre><code>## ── Deployment complete ─────────────────────────────────────────────────────────</code></pre>
+<pre><code>## ✔ Successfully deployed to &lt;https://sihaea.shinyapps.io/csu22013_she_final/&gt;</code></pre>
 <pre class="r"><code># Personal Access Token for GitHub API
-API_PAT &lt;- &#39;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&#39;
-headers &lt;- c(Authorization = paste(&quot;Bearer&quot;, API_PAT))
+API_PAT &lt;&lt;- c(Authorization = paste(&quot;Bearer&quot;, &#39;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&#39;))
+PAGE_LIMITS &lt;&lt;- 5
 
-# Initialize a list to store total commit counts for each repository
-total_commits_list &lt;- list()
+# default values for selections in left menu
+# daterange = &#39;daily&#39;
+# language = &#39;all&#39;</code></pre>
+<p>Function to Create base URL, to which /commits or /languages can be
+appended. Daterange fetches either top repositories from last day, week,
+or month.</p>
+<pre class="r"><code># Function: Get list of base URLs for trending repositories
+API_1_create_urls &lt;- function(date_range){
+  #print(&#39;###################### API_1 ######################&#39;)
+  # Call to MIT GitHub API to get information on current top trending repositories
+  url &lt;- &quot;https://api.gitterapp.com/repositories?since=daily&quot;
+  response &lt;- GET(url, query = list(since = date_range))
+  repo_data &lt;- content(response)
+  
+  # Retrieve list of trending authors
+  repo_author &lt;- lapply(repo_data, &quot;[[&quot;, 1)
+ 
+  # Retrieve list of trending repository names
+  repo_name &lt;- lapply(repo_data, &quot;[[&quot;, 2)
 
-# Function to fetch total commits for a URL
-fetch_total_commits &lt;- function(commit_activity_url) {
+# Function: Manually create base URL to repository
+  create_url &lt;- function(repo_author, repo_name) {
+  url &lt;- paste0(&quot;https://api.github.com/repos/&quot;, repo_author, &quot;/&quot;, repo_name)
+  return(url)
+  }
+
+  # Create list of URLs to top repositories
+  url &lt;- mapply(create_url, repo_author, repo_name, SIMPLIFY = FALSE)
+  url_list &lt;- as.character(url)
   
-  # Set page number to 1, and total commit count to 0
-  page &lt;- 1
-  total_commits &lt;- 0
+  return(url_list)
+}</code></pre>
+<p>Function which creates data frame of each repository, their languages
+and percentage of each language within the project</p>
+<pre class="r"><code># languageDataFrame
+# Function to fetch language percentages per repository
+create_language_dataframe &lt;- function() {
+  #print(&#39;###################### API_2 ######################&#39;)
+  # Initialise list
+  language_data_list &lt;- list()
   
-  # Set max commits shown per page to 100, and loop through each page, counting total number of commits, until there are none left to count
-  while (TRUE) {
-    commits_url &lt;- paste0(commit_activity_url, &quot;?per_page=100&amp;page=&quot;, page)
-    
-    # Acceess the commit data from specified page of URL using official GitHub API
-    response &lt;- GET(commits_url, add_headers(headers))
-    commit_data &lt;- content(response)
-    
-    # Calculate number of commits on page
-    commits_on_page &lt;- length(commit_data)
-    
-    # If there are no commits in repository, exit loop and return total commits as 0
-    if (commits_on_page == 0) {
-      break
+  # Loop through each URL
+  for (url in GIT_URLS) {
+
+    repo_name &lt;- strsplit(url, &quot;/&quot;)[[1]][6]  # Get repository name from URL
+    url &lt;- paste0(url, &quot;/languages&quot;)         # Append /languages to base URL
+      
+    response &lt;- GET(url, add_headers(API_PAT))
+    language_data &lt;- content(response)
+
+    if(length(language_data) == 0){
+      GIT_URLS = GIT_URLS[-which(GIT_URLS == url)]
+      next
     }
     
-    # Add total commits from page to total commit count, and go to next page
-    total_commits &lt;- total_commits + commits_on_page
-    page &lt;- page + 1
+    # Convert language_data into a data frame
+    language_df &lt;- data.frame(
+      repository = repo_name,
+      language = names(language_data),
+      percentage = unlist(language_data)
+    )
+    
+    language_data_list[[repo_name]] &lt;- language_df
   }
   
-  # Return value of total repository commits
-  return(total_commits)
+  # Combine all language dataframes into a single dataframe
+  language_table &lt;- bind_rows(language_data_list)
+  
+  # Pivot the data into wide format
+  language_table &lt;- language_table %&gt;%
+    pivot_wider(
+      names_from = language,
+      values_from = percentage,
+      values_fill = 0
+    )
+  
+  # Tibble -&gt; df
+  language_table = as.data.frame(language_table)
+  # Colnames
+  rownames(language_table) = language_table$repository
+  language_table$repository &lt;- NULL
+  
+  # Calculate the row sums
+  row_sums &lt;- rowSums(language_table)
+
+  # Calculate the percentage of each column by row to 2 decimal places
+  language_table &lt;- round(language_table / row_sums, 2)
+  
+  #Remove languages that contribute less than 1% of the code
+  language_table &lt;- language_table[,colSums(language_table != 0) &gt; 0]
+  
+  return(language_table)
+}</code></pre>
+<p>Function which filters languageDataFrame by programming language,
+returning the top 5 (or less if there are less than 5) repositories
+which contain the user specified language (e.g. Python)</p>
+<pre class="r"><code># filteredLanguageDataFrame
+# Function: Create data frame to display the top 5 trending repositories, filtering by programming language. &quot;All&quot; returns top 5 generally
+create_filtered_top_n_language_dataframe &lt;- function(language, language_df, n = 5) {
+  # print(&#39;create_filtered_top_n_language_dataframe&#39;)
+  if (language == &quot;All&quot;) {
+      # Select the top n repositories based on trendiness
+      return(head(language_df, n))
+  }
+  
+  # Get the index of the chosen language in the data frame
+  language_index &lt;- which(colnames(language_df) == language)
+    
+  # Filter out repositories with zero% of chosen language
+  filtered_repositories &lt;- language_df[language_df[, language_index] &gt; 0, ]
+    
+  # Select repositories, considering the case of less than n repositories
+  num_repositories &lt;- min(nrow(filtered_repositories), n)
+  top_repositories &lt;- filtered_repositories[1:num_repositories, ]
+
+  return(top_repositories)
+}</code></pre>
+<p>Function which creates a data frame of every commit in the master
+branch of a repo. Each commit in data frame includes: Repository name,
+developer name, developer contact email, datetime commit published
+at</p>
+<pre class="r"><code># commitDataFrame
+# Function: Get the entire commit history of n number of repositories from top trending
+create_commits_dataframe &lt;- function() {
+   #print(&#39;create_commits_dataframe&#39;)
+  # Initialize an empty data frame to store the commit information
+  cols = c(&#39;repo&#39;,&#39;dev_name&#39;,&#39;email&#39;,&#39;datetime&#39;)
+  data_table = data.frame(matrix(nrow = 0, ncol = length(cols))) 
+  colnames(data_table) = cols
+  
+  # Loop through each commit activity URL
+  for (url in GIT_URLS_FILTERED) {
+    
+    # Append /commits to base URL
+    url &lt;- paste0(url, &quot;/commits&quot;)
+    
+    page &lt;- 1
+
+    while (page &lt;= PAGE_LIMITS) {
+      page_url &lt;- paste0(url, &quot;?per_page=100&amp;page=&quot;, page)
+      response &lt;- GET(page_url, add_headers(API_PAT))
+      commit_data &lt;- content(response)
+      
+      # Break if no more commits
+      if (length(commit_data) == 0) {
+        break  
+      }
+      
+      df &lt;- data.frame(
+        repo = c(strsplit(unlist(lapply(commit_data, function (x) x$commit$tree$url)), &quot;/&quot;)[[1]][6]),
+        dev_name = c(unlist(lapply(commit_data, function (x) x$commit$author$name))),
+        email = c(unlist(lapply(commit_data, function (x) x$commit$author$email))),
+        datetime = c(unlist(lapply(commit_data, function (x) x$commit$author$date)))
+      )
+      
+      # Add commit data to main data frame
+      data_table &lt;- rbind(data_table, df) 
+      page &lt;- page + 1
+    }
+  
+  }
+  
+  return(data_table)
+}</code></pre>
+<pre class="r"><code># Function: Retrieve a list of all of the languages used in top repositories
+get_list_of_languages &lt;- function(language_df){
+  #print(&#39;get_list_of_languages&#39;)
+  return(colnames(language_df))
+  
+}</code></pre>
+<pre class="r"><code># Function: Get the URLs from list of repositories
+get_urls_from_list_of_repo_names  = function(language_df){
+   #print(&#39;get_urls_from_list_of_repo_names&#39;)
+    filtered_urls &lt;- list()
+    for(url in GIT_URLS){
+      name &lt;- strsplit(url, &quot;/&quot;)[[1]][6]
+      if(name %in% rownames(language_df)){
+        filtered_urls[name] &lt;- url
+      }
+    }  
+    
+  return(filtered_urls)
+}</code></pre>
+<pre class="r"><code># Function: Count of all commits grouped by repo and then developer. Email for each developer included
+count_commits_by_DevRepo &lt;- function(commits_df){
+     #print(&#39;count_commits_by_DevRepo&#39;)
+    aggregatedDataFrame = aggregate(email ~ dev_name + repo, data = commits_df, FUN = length)
+    aggregatedDataFrame = setNames(aggregatedDataFrame, c(&#39;dev_name&#39;, &#39;repo&#39;, &#39;count&#39;))
+    aggregatedDataFrame = merge(x = aggregatedDataFrame, y = commits_df[,c(&#39;dev_name&#39;,&#39;email&#39;)], by = &#39;dev_name&#39;)
+    
+    aggregatedDataFrame &lt;- aggregatedDataFrame[!duplicated(aggregatedDataFrame[c(&quot;dev_name&quot;, &quot;repo&quot;, &quot;count&quot;, &quot;email&quot;)]), ]
+    
+    aggregatedDataFrame &lt;- aggregatedDataFrame[order(aggregatedDataFrame$repo, -aggregatedDataFrame$count),]
+    
+    return(aggregatedDataFrame)
+}</code></pre>
+<pre class="r"><code># Function: Get the top n developers, per top n repository
+top_n_commiters_per_repo &lt;- function(commits_count, n = 5) {
+   #print(&#39;top_n_commiters_per_repo&#39;)
+  # Get unique repos 
+  unique_repos &lt;- unique(commits_count$repo)
+  
+  # Create new data frame to store top n data
+  result_df &lt;- data.frame(dev = character(0), repo = character(0), counts = numeric(0))
+  
+  # Loop through each repository
+  for (repo in unique_repos) {
+    repo_data &lt;- commits_count[commits_count$repo == repo, ]  # Get rows for each repo
+    top_devs &lt;- repo_data[order(-repo_data$count), ][1:min(dim(repo_data)[1],n), ] # Order by count and get top n devs
+    result_df &lt;- rbind(result_df, top_devs) # Add results to new data frame
+  }
+  
+  row.names(result_df) &lt;- 1:nrow(result_df)
+  
+
+  
+  return(result_df)
+}</code></pre>
+<pre class="r"><code># Function: Create a percentage stacked bar plot for total languages used within top n repositories
+graph_languages &lt;- function(df){
+  
+  # print(&#39;graph_languages&#39;)
+  # Find columns where all values are 0
+  cols_to_remove &lt;- colnames(df)[apply(df, 2, function(col) all(col == 0))]
+
+  # Remove zero value columns
+  df_filtered &lt;- df[, !(colnames(df) %in% cols_to_remove)]
+
+  language_matrix &lt;- t(as.matrix(df_filtered))
+
+  # Get remaining repository names
+  repo_names &lt;- rownames(df_filtered)
+
+  stacked_barplot &lt;- plot_ly()
+
+  # Add a trace for each programming language
+  for (i in 1:nrow(language_matrix)) {
+    stacked_barplot &lt;- stacked_barplot %&gt;%
+      add_trace(
+        x = repo_names,
+        y = language_matrix[i, ],
+        type = &quot;bar&quot;,
+        name = rownames(language_matrix)[i]
+      )
+  }
+
+  # Generate bar plot
+  stacked_barplot &lt;- stacked_barplot %&gt;%
+    layout(
+      title = &quot;Programming Languages Used in Trending Projects&quot;,
+      xaxis = list(title = &quot;Repository&quot;),
+      yaxis = list(title = &quot;Percentage&quot;),
+      barmode = &quot;stack&quot;
+    )
+  
+  return(stacked_barplot)
+}</code></pre>
+<pre class="r"><code># Function: Create a grouped barplot of top n developers for top n repos, commit counts
+
+graph_commits &lt;- function(df) {
+   # print(&#39;graph_commits&#39;)
+plot &lt;- plot_ly(df, 
+                x = ~repo, 
+                y = ~count, 
+                text = ~paste(&quot;Developer: &quot;, dev_name, &quot;&lt;br&gt;No. Commits: &quot;, count), 
+                hoverinfo = &#39;text&#39;, 
+                type = &#39;bar&#39;, 
+                split = ~dev_name) %&gt;%
+  layout(
+    title = &#39;Most Active Developers&#39;,
+    xaxis = list(title = &#39;Repository&#39;),
+    yaxis = list(title = &#39;Number of Commits&#39;),
+    barmode = &#39;group&#39;
+  )
+return(plot)
+}</code></pre>
+<pre class="r"><code># Function: Create an information table to display referenced developers information - name, repository, email address
+
+create_dev_info_table &lt;- function(df){
+  
+  return(datatable(df[, -which(names(df) == &quot;count&quot;)],options = list(scrollY = &quot;300px&quot;)))
+
+}</code></pre>
+<p>PLOTTERS</p>
+<pre class="r"><code># Function: Retrieves data for programming languages percentage stacked bar chart
+stackedLanguageBarplot &lt;- function(language_df_filtered) {
+  
+  return(graph_languages(language_df_filtered)) 
+
+}</code></pre>
+<pre class="r"><code># Function: Retrieves data for developer information table
+dev_info_table &lt;- function(commits_count) {
+
+  return(create_dev_info_table(commits_count))
+  
+}</code></pre>
+<pre class="r"><code># Function: Retrieves data for commit count bar plot graph
+groupedCommitsBarplot &lt;- function(commits_count) {
+  
+  return(graph_commits(commits_count))
+  
+}</code></pre>
+<p>EVENT HANDLERS</p>
+<pre class="r"><code>date_range_event &lt;- function(date_range){
+    GIT_URLS &lt;&lt;- API_1_create_urls(date_range)
+    # Create data frame of repositories, programming languages, and language percentages
+    LANGUAGE_DF &lt;&lt;- create_language_dataframe()
 }
 
-# Set up parallel processing
-plan(multisession, workers = availableCores())
-
-# Fetch total commits concurrently
-total_commits_list &lt;- future_map_int(commit_activity_url_list, fetch_total_commits)
-
-# Display the list of total commit counts from each repository URL
-print(total_commits_list)</code></pre>
-<pre><code>##  [1]  320   15   14  372  281   96 7694 2105 1644   27</code></pre>
-<p>The following chunk utilises Shiny, an open source package for R, to
-build the app which creates and displays the commit data.</p>
-<p>At the moment the code creates and displays a sample bar plot,
-comparing the total number of commits of the top 10 trending
-repositories.</p>
-<pre class="r"><code># Define UI for app which draws barplot 
-ui &lt;- fluidPage(
+language_event &lt;- function(input, output, language){
+      
+      print(language)
   
-  # App title
-  titlePanel(&quot;Top 10 Trending GitHub Repositories&quot;),
+      language_df_filtered = create_filtered_top_n_language_dataframe(language, LANGUAGE_DF)
+      
+      GIT_URLS_FILTERED &lt;&lt;- get_urls_from_list_of_repo_names(language_df_filtered)
   
-  # Output: barplot
-  plotOutput(outputId = &quot;bar_chart&quot;)
-)
-
-# Define server logic required to draw barplot
-server &lt;- function(input, output) {
-  
-  # Render the bar chart
-  output$bar_chart &lt;- renderPlot({
+      commits_df = create_commits_dataframe()
+      
+      # Count number of commits for each developer
+      commits_count = count_commits_by_DevRepo(commits_df)
+          
+      # Calculate top 5 developers for each repo, based on number of commits
+      commits_count = top_n_commiters_per_repo(commits_count)
+      
+      # Display stacked language bar plot
+      output$stackedBarplot &lt;- renderPlotly({
+        stackedLanguageBarplot(language_df_filtered)
+      })
+      
+      # Display developer info table 
+      output$table &lt;- renderDT({
+        dev_info_table(commits_count)
+      })
     
-    # Determine the size of y-axis and add padding
-    max_y &lt;- max(total_commits_list) * 1.2
+      # Display grouped commits bar plot
+      output$groupedBarplot &lt;- renderPlotly({
+        groupedCommitsBarplot(commits_count)
+      })
+      
+      return(output)
+}</code></pre>
+<pre class="r"><code># Function: Populates drop-down list
+getLanguages &lt;- function() {
+      
+      dropdown_list &lt;- sort(get_list_of_languages(LANGUAGE_DF))
+      dropdown_list &lt;- c(&quot;All&quot;, dropdown_list)
+      
+      return(dropdown_list)
+}</code></pre>
+<p>Init LANGUAGE_DF for the languages dropdown</p>
+<pre class="r"><code>date_range_event(&#39;daily&#39;)</code></pre>
+<p>SERVER / UI FRAMEWORK</p>
+<pre class="r"><code>ui &lt;- shinyUI(fluidPage(
+
+  titlePanel(&quot;Developer Recruitment Tool&quot;),
     
-    # Create the bar chart using barplot
-    barplot(total_commits_list, col = &quot;#007bc2&quot;, border = &quot;black&quot;, names.arg = repo_name, 
-        xlab = &quot;Repository Names in Descending Order from Most Trending to Least Trending&quot;,
-        ylab = &quot;Total Commits&quot;,
-        main = &quot;Total Commits for the Top 10 Trending Repositories on GitHub&quot;,
-        ylim = c(0, max_y))
+  sidebarLayout(
+    # Date range drop-down menu
+    sidebarPanel(width = 2, selectInput(
+      &quot;date_range_dropdown&quot;,
+      &quot;GitHub Date Range:&quot;,
+      choices = c(&quot;Daily&quot;, &quot;Weekly&quot;, &quot;Monthly&quot;)
+    ),
+    selectInput(
+      # Language drop-down menu
+      &quot;language_dropdown&quot;,
+      &quot;Programming Language:&quot;,
+      choices = getLanguages()
+    )),
+    mainPanel(
+      withSpinner(plotlyOutput(&quot;groupedBarplot&quot;)),
+      withSpinner(plotlyOutput(&quot;stackedBarplot&quot;)),
+      withSpinner(dataTableOutput(&quot;table&quot;))
+    )
+  )
+))
+
+
+# Define server function
+server &lt;- shinyServer(function(input, output, session) {
+  
+  observeEvent(input$date_range_dropdown, {
+    
+    # Update data from GitHub
+    date_range_event(input$date_range_dropdown)
+    
+    # Update language input with new languages
+    updateSelectInput(session, &quot;language_dropdown&quot;, choices = getLanguages())
+  })
+
+  observeEvent(input$language_dropdown,{
+    output &lt;- language_event(input, output, input$language_dropdown)
     
   })
-}
+  
+ })
 
-# Create Shiny app
-shinyApp(ui = ui, server = server)</code></pre>
+# Run the Shiny app
+shinyApp(ui, server)</code></pre>
 <div style="width: 100% ; height: 400px ; text-align: center; box-sizing: border-box; -moz-box-sizing: border-box; -webkit-box-sizing: border-box;" class="muted well">Shiny applications not supported in static R Markdown documents</div>
 
 

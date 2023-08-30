@@ -1,0 +1,10 @@
+name: project
+title:
+username: sihaea
+account: sihaea
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9716554
+bundleId: 7624934
+url: https://sihaea.shinyapps.io/project/
+version: 1

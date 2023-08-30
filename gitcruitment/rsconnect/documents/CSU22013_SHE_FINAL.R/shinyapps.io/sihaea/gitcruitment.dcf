@@ -1,0 +1,12 @@
+name: gitcruitment
+title: gitcruitment
+username: sihaea
+account: sihaea
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9716812
+bundleId: 7625023
+url: https://sihaea.shinyapps.io/gitcruitment/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
